@@ -1,0 +1,272 @@
+{
+  "name": "test6",
+  "nodes": [
+    {
+      "id": "dataNode_1767746776799",
+      "type": "dataNode",
+      "position": {
+        "x": -84.76052039789886,
+        "y": 103.39174848637717
+      },
+      "data": {
+        "label": "文件输入",
+        "category": "Data",
+        "filename": "train_customers2_train.csv"
+      },
+      "width": 240,
+      "height": 132
+    },
+    {
+      "id": "algoNode_1767746778955",
+      "type": "algoNode",
+      "position": {
+        "x": 279.4294001528172,
+        "y": 152.09156344374037
+      },
+      "data": {
+        "label": "缺失值处理",
+        "category": "Preprocessing",
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 149
+    },
+    {
+      "id": "algoNode_1767746781889",
+      "type": "algoNode",
+      "position": {
+        "x": 528.1422175664004,
+        "y": -7.7592112357169185
+      },
+      "data": {
+        "label": "线性回归",
+        "category": "Model",
+        "params": {
+          "fit_intercept": true,
+          "random_state": 42,
+          "test_file": "train_customers2_test.csv"
+        },
+        "status": "成功",
+        "error": null
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 528.1422175664004,
+        "y": -7.7592112357169185
+      }
+    },
+    {
+      "id": "algoNode_1767746783075",
+      "type": "algoNode",
+      "position": {
+        "x": 557.3117955588116,
+        "y": 163.56276414845485
+      },
+      "data": {
+        "label": "岭回归",
+        "category": "Model",
+        "params": {
+          "fit_intercept": true,
+          "random_state": 42,
+          "test_file": "train_customers2_test.csv",
+          "alpha": 1,
+          "solver": "auto"
+        },
+        "status": "成功",
+        "error": null
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 557.3117955588116,
+        "y": 163.56276414845485
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767746812101",
+      "type": "algoNode",
+      "position": {
+        "x": 552.4413633513582,
+        "y": 368.37583859578916
+      },
+      "data": {
+        "label": "GBDT回归",
+        "category": "Model",
+        "params": {
+          "n_estimators": 100,
+          "learning_rate": 0.1,
+          "max_depth": 3,
+          "subsample": 1,
+          "random_state": 42,
+          "test_file": "train_customers2_test.csv"
+        },
+        "status": "成功",
+        "error": null
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 552.4413633513582,
+        "y": 368.37583859578916
+      }
+    },
+    {
+      "id": "evalNode_1767747183951",
+      "type": "evalNode",
+      "position": {
+        "x": 827.5967120405348,
+        "y": 30.308846436457795
+      },
+      "data": {
+        "label": "模型评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "regression",
+          "mse": 7361.313286310191,
+          "rmse": 85.79809605294392,
+          "mae": 66.48677998733653,
+          "r2_score": 0.5517104172353704,
+          "prediction_head": [
+            491.910393263709,
+            329.891267817055,
+            287.08755785081496,
+            532.792764633277,
+            516.330139474605,
+            471.18605189775303,
+            456.5126967959542,
+            478.66875048668055,
+            465.8739549803727,
+            330.53744761957887
+          ]
+        }
+      },
+      "width": 260,
+      "height": 159
+    },
+    {
+      "id": "evalNode_1767747185499",
+      "type": "evalNode",
+      "position": {
+        "x": 879.1932393396746,
+        "y": 322.26968383646806
+      },
+      "data": {
+        "label": "模型评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "regression",
+          "mse": 7361.722505699402,
+          "rmse": 85.80048080109692,
+          "mae": 66.49073532786605,
+          "r2_score": 0.5516854965748694,
+          "prediction_head": [
+            491.85592020773777,
+            329.86971614225683,
+            287.07250854804204,
+            532.7280803989038,
+            516.3347254078736,
+            471.16295871057343,
+            456.5449309831288,
+            478.6606727230918,
+            465.8064871778033,
+            330.4731190352286
+          ]
+        }
+      },
+      "width": 260,
+      "height": 159
+    },
+    {
+      "id": "evalNode_1767747186853",
+      "type": "evalNode",
+      "position": {
+        "x": 960.9926118870912,
+        "y": 611.7136174657886
+      },
+      "data": {
+        "label": "模型评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "regression",
+          "mse": 6739.0114298731,
+          "rmse": 82.09148207867305,
+          "mae": 65.08679969673578,
+          "r2_score": 0.5896073832692219,
+          "prediction_head": [
+            463.41888208486813,
+            299.030838516447,
+            316.8458861663529,
+            483.47191792664444,
+            507.50277871130737,
+            456.78209791027484,
+            495.7847084120351,
+            532.1294815138913,
+            473.99243743442923,
+            298.03277664557476
+          ]
+        }
+      },
+      "width": 260,
+      "height": 159
+    }
+  ],
+  "edges": [
+    {
+      "source": "dataNode_1767746776799",
+      "sourceHandle": null,
+      "target": "algoNode_1767746778955",
+      "targetHandle": null,
+      "id": "reactflow__edge-dataNode_1767746776799-algoNode_1767746778955"
+    },
+    {
+      "source": "algoNode_1767746778955",
+      "sourceHandle": null,
+      "target": "algoNode_1767746781889",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767746778955-algoNode_1767746781889"
+    },
+    {
+      "source": "algoNode_1767746778955",
+      "sourceHandle": null,
+      "target": "algoNode_1767746783075",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767746778955-algoNode_1767746783075"
+    },
+    {
+      "source": "algoNode_1767746778955",
+      "sourceHandle": null,
+      "target": "algoNode_1767746812101",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767746778955-algoNode_1767746812101"
+    },
+    {
+      "source": "algoNode_1767746781889",
+      "sourceHandle": null,
+      "target": "evalNode_1767747183951",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767746781889-evalNode_1767747183951"
+    },
+    {
+      "source": "algoNode_1767746783075",
+      "sourceHandle": null,
+      "target": "evalNode_1767747185499",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767746783075-evalNode_1767747185499"
+    },
+    {
+      "source": "algoNode_1767746812101",
+      "sourceHandle": null,
+      "target": "evalNode_1767747186853",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767746812101-evalNode_1767747186853"
+    }
+  ],
+  "updated_at": 1767747210.0784657
+}

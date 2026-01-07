@@ -1,0 +1,112 @@
+{
+  "filename": "train_customers2.csv",
+  "columns": {
+    "年龄": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 6
+    },
+    "性别": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 2
+    },
+    "经营年限": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "商圈": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "业态": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "档位": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 5
+    },
+    "终端类型": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "周购进量（条）": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 173
+    },
+    "周购进金额（元）": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 619
+    },
+    "单条价格（元）": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 70
+    },
+    "品牌宽度": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 169
+    },
+    "卷烟陈列背柜": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 4
+    },
+    "卷烟陈列前柜": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 4
+    },
+    "经营品种数量": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 368
+    },
+    "非烟销售比重": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 5
+    }
+  },
+  "rows": 700,
+  "label_column": "经营品种数量"
+}

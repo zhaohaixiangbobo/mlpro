@@ -1,0 +1,1011 @@
+{
+  "name": "test4",
+  "nodes": [
+    {
+      "id": "dataNode_1766988966635",
+      "type": "dataNode",
+      "position": {
+        "x": -165.57053640736984,
+        "y": 118.64700268647277
+      },
+      "data": {
+        "label": "数据输入",
+        "filename": "train_customers2.csv"
+      },
+      "width": 240,
+      "height": 133,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -165.57053640736984,
+        "y": 118.64700268647277
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767074539755",
+      "type": "algoNode",
+      "position": {
+        "x": 150.6464516984347,
+        "y": -85.970123563426
+      },
+      "data": {
+        "label": "缺失值处理",
+        "category": "Preprocessing",
+        "status": "成功",
+        "params": {
+          "method": "mode",
+          "columns": [
+            "年龄",
+            "性别",
+            "经营年限",
+            "商圈",
+            "业态",
+            "档位",
+            "终端类型",
+            "周购进量（条）",
+            "周购进金额（元）",
+            "单条价格（元）",
+            "品牌宽度",
+            "卷烟陈列背柜",
+            "卷烟陈列前柜",
+            "经营品种数量"
+          ]
+        }
+      },
+      "width": 200,
+      "height": 149,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 150.6464516984347,
+        "y": -85.970123563426
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767084435103",
+      "type": "algoNode",
+      "position": {
+        "x": 396.7779248059471,
+        "y": 24.34169634960614
+      },
+      "data": {
+        "label": "标准化",
+        "category": "Preprocessing",
+        "status": "成功",
+        "params": {
+          "method": "standard",
+          "columns": [
+            "档位",
+            "周购进量（条）",
+            "周购进金额（元）",
+            "单条价格（元）",
+            "品牌宽度",
+            "卷烟陈列背柜",
+            "卷烟陈列前柜",
+            "经营品种数量"
+          ]
+        }
+      },
+      "width": 200,
+      "height": 149,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 396.7779248059471,
+        "y": 24.34169634960614
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767084454393",
+      "type": "algoNode",
+      "position": {
+        "x": 691.2237908545877,
+        "y": 139.26192736041867
+      },
+      "data": {
+        "label": "决策树",
+        "category": "Model",
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 691.2237908545877,
+        "y": 139.26192736041867
+      },
+      "dragging": false
+    },
+    {
+      "id": "evalNode_1767084470311",
+      "type": "evalNode",
+      "position": {
+        "x": 979.1357861491919,
+        "y": 162.78116262437624
+      },
+      "data": {
+        "label": "基础评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "classification",
+          "accuracy": 0.3142857142857143,
+          "confusion_matrix": [
+            [
+              9,
+              6,
+              5,
+              0,
+              0
+            ],
+            [
+              9,
+              3,
+              7,
+              0,
+              0
+            ],
+            [
+              9,
+              10,
+              17,
+              4,
+              8
+            ],
+            [
+              0,
+              0,
+              10,
+              6,
+              10
+            ],
+            [
+              0,
+              0,
+              12,
+              6,
+              9
+            ]
+          ],
+          "report": {
+            "0": {
+              "precision": 0.3333333333333333,
+              "recall": 0.45,
+              "f1-score": 0.3829787234042553,
+              "support": 20
+            },
+            "1": {
+              "precision": 0.15789473684210525,
+              "recall": 0.15789473684210525,
+              "f1-score": 0.15789473684210525,
+              "support": 19
+            },
+            "2": {
+              "precision": 0.3333333333333333,
+              "recall": 0.3541666666666667,
+              "f1-score": 0.3434343434343434,
+              "support": 48
+            },
+            "3": {
+              "precision": 0.375,
+              "recall": 0.23076923076923078,
+              "f1-score": 0.2857142857142857,
+              "support": 26
+            },
+            "4": {
+              "precision": 0.3333333333333333,
+              "recall": 0.3333333333333333,
+              "f1-score": 0.3333333333333333,
+              "support": 27
+            },
+            "accuracy": 0.3142857142857143,
+            "macro avg": {
+              "precision": 0.306578947368421,
+              "recall": 0.30523279352226723,
+              "f1-score": 0.30067108454566455,
+              "support": 140
+            },
+            "weighted avg": {
+              "precision": 0.31726190476190474,
+              "recall": 0.3142857142857143,
+              "f1-score": 0.31123567415360726,
+              "support": 140
+            }
+          }
+        }
+      },
+      "width": 260,
+      "height": 159,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 979.1357861491919,
+        "y": 162.78116262437624
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767102797645",
+      "type": "algoNode",
+      "position": {
+        "x": 163.29453419609024,
+        "y": 230.80771161715938
+      },
+      "data": {
+        "label": "缺失值处理",
+        "category": "Preprocessing",
+        "params": {
+          "method": "median",
+          "columns": []
+        },
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 149,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 163.29453419609024,
+        "y": 230.80771161715938
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767102805483",
+      "type": "algoNode",
+      "position": {
+        "x": 451.0362950712167,
+        "y": 365.607626032432
+      },
+      "data": {
+        "label": "K-Means",
+        "category": "Model",
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 451.0362950712167,
+        "y": 365.607626032432
+      },
+      "dragging": false
+    },
+    {
+      "id": "evalNode_1767102811468",
+      "type": "evalNode",
+      "position": {
+        "x": 735.2648902343085,
+        "y": 485.98003964030784
+      },
+      "data": {
+        "label": "基础评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "clustering",
+          "n_clusters": 8,
+          "n_noise": 0,
+          "silhouette_score": 0.5794728665938801,
+          "calinski_harabasz_score": 6335.914220627753,
+          "davies_bouldin_score": 0.4790357692701289,
+          "inertia": 1507031048.3302982,
+          "centers": [
+            [
+              24.675,
+              205.48749999999998,
+              39133.7375,
+              191.3625,
+              179.0625,
+              1.8875000000000002,
+              1.9375000000000002,
+              469.06249999999994
+            ],
+            [
+              23.011111111111113,
+              148.85555555555553,
+              16556.92222222223,
+              168.4777777777778,
+              118.29999999999998,
+              0.9111111111111111,
+              0.8888888888888894,
+              293.5222222222221
+            ],
+            [
+              25.013513513513512,
+              220.37837837837836,
+              48216.148648648654,
+              189.28378378378378,
+              182.93243243243242,
+              1.9729729729729732,
+              1.9864864864864866,
+              473.8648648648648
+            ],
+            [
+              23.22772277227723,
+              153.9207920792079,
+              29257.92079207921,
+              171.16831683168317,
+              131.36633663366334,
+              1.0495049504950495,
+              1.138613861386139,
+              324.5544554455445
+            ],
+            [
+              24.80722891566265,
+              203.5180722891566,
+              43742.98795180723,
+              186.3132530120482,
+              172.39759036144576,
+              1.7469879518072293,
+              1.951807228915663,
+              464.0963855421686
+            ],
+            [
+              22.90566037735849,
+              150.79245283018867,
+              23500.07547169811,
+              167.54716981132074,
+              119.2641509433962,
+              0.8773584905660382,
+              0.867924528301887,
+              295.9622641509433
+            ],
+            [
+              24.814814814814813,
+              220.62962962962962,
+              53580.740740740745,
+              188.01234567901236,
+              180.9506172839506,
+              1.925925925925926,
+              2.037037037037037,
+              496.1604938271604
+            ],
+            [
+              24.023529411764706,
+              189.98823529411766,
+              34501.623529411765,
+              180.8235294117647,
+              146.9764705882353,
+              1.4588235294117644,
+              1.670588235294118,
+              395.2117647058823
+            ]
+          ]
+        }
+      },
+      "width": 260,
+      "height": 181,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 735.2648902343085,
+        "y": 485.98003964030784
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767516688155",
+      "type": "algoNode",
+      "position": {
+        "x": 655.5948199155481,
+        "y": -202.82879619748377
+      },
+      "data": {
+        "label": "逻辑回归",
+        "category": "Model",
+        "status": "成功",
+        "params": {
+          "C": 1,
+          "max_iter": 1000
+        }
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 655.5948199155481,
+        "y": -202.82879619748377
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767516709491",
+      "type": "algoNode",
+      "position": {
+        "x": 656.9891322077198,
+        "y": -23.547970249105845
+      },
+      "data": {
+        "label": "逻辑回归",
+        "category": "Model",
+        "status": "成功",
+        "params": {
+          "C": 1,
+          "max_iter": 10000
+        }
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 656.9891322077198,
+        "y": -23.547970249105845
+      },
+      "dragging": false
+    },
+    {
+      "id": "evalNode_1767516730401",
+      "type": "evalNode",
+      "position": {
+        "x": 1034.3611746309532,
+        "y": -158.86550020217007
+      },
+      "data": {
+        "label": "基础评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "classification",
+          "accuracy": 0.3,
+          "confusion_matrix": [
+            [
+              6,
+              6,
+              8,
+              0,
+              0
+            ],
+            [
+              6,
+              2,
+              11,
+              0,
+              0
+            ],
+            [
+              5,
+              6,
+              22,
+              3,
+              12
+            ],
+            [
+              0,
+              0,
+              9,
+              6,
+              11
+            ],
+            [
+              0,
+              0,
+              14,
+              7,
+              6
+            ]
+          ],
+          "report": {
+            "0": {
+              "precision": 0.35294117647058826,
+              "recall": 0.3,
+              "f1-score": 0.3243243243243243,
+              "support": 20
+            },
+            "1": {
+              "precision": 0.14285714285714285,
+              "recall": 0.10526315789473684,
+              "f1-score": 0.12121212121212122,
+              "support": 19
+            },
+            "2": {
+              "precision": 0.34375,
+              "recall": 0.4583333333333333,
+              "f1-score": 0.39285714285714285,
+              "support": 48
+            },
+            "3": {
+              "precision": 0.375,
+              "recall": 0.23076923076923078,
+              "f1-score": 0.2857142857142857,
+              "support": 26
+            },
+            "4": {
+              "precision": 0.20689655172413793,
+              "recall": 0.2222222222222222,
+              "f1-score": 0.2142857142857143,
+              "support": 27
+            },
+            "accuracy": 0.3,
+            "macro avg": {
+              "precision": 0.2842889742103738,
+              "recall": 0.26331758884390466,
+              "f1-score": 0.2676787176787177,
+              "support": 140
+            },
+            "weighted avg": {
+              "precision": 0.29720940100178,
+              "recall": 0.3,
+              "f1-score": 0.291863895435324,
+              "support": 140
+            }
+          }
+        }
+      },
+      "width": 260,
+      "height": 159,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1034.3611746309532,
+        "y": -158.86550020217007
+      },
+      "dragging": false
+    },
+    {
+      "id": "evalNode_1767516736682",
+      "type": "evalNode",
+      "position": {
+        "x": 1024.2410372668414,
+        "y": -12.173053624757387
+      },
+      "data": {
+        "label": "基础评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "classification",
+          "accuracy": 0.3,
+          "confusion_matrix": [
+            [
+              6,
+              6,
+              8,
+              0,
+              0
+            ],
+            [
+              6,
+              2,
+              11,
+              0,
+              0
+            ],
+            [
+              5,
+              6,
+              22,
+              3,
+              12
+            ],
+            [
+              0,
+              0,
+              9,
+              6,
+              11
+            ],
+            [
+              0,
+              0,
+              14,
+              7,
+              6
+            ]
+          ],
+          "report": {
+            "0": {
+              "precision": 0.35294117647058826,
+              "recall": 0.3,
+              "f1-score": 0.3243243243243243,
+              "support": 20
+            },
+            "1": {
+              "precision": 0.14285714285714285,
+              "recall": 0.10526315789473684,
+              "f1-score": 0.12121212121212122,
+              "support": 19
+            },
+            "2": {
+              "precision": 0.34375,
+              "recall": 0.4583333333333333,
+              "f1-score": 0.39285714285714285,
+              "support": 48
+            },
+            "3": {
+              "precision": 0.375,
+              "recall": 0.23076923076923078,
+              "f1-score": 0.2857142857142857,
+              "support": 26
+            },
+            "4": {
+              "precision": 0.20689655172413793,
+              "recall": 0.2222222222222222,
+              "f1-score": 0.2142857142857143,
+              "support": 27
+            },
+            "accuracy": 0.3,
+            "macro avg": {
+              "precision": 0.2842889742103738,
+              "recall": 0.26331758884390466,
+              "f1-score": 0.2676787176787177,
+              "support": 140
+            },
+            "weighted avg": {
+              "precision": 0.29720940100178,
+              "recall": 0.3,
+              "f1-score": 0.291863895435324,
+              "support": 140
+            }
+          }
+        }
+      },
+      "width": 260,
+      "height": 159,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1024.2410372668414,
+        "y": -12.173053624757387
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1767530166059",
+      "type": "algoNode",
+      "position": {
+        "x": 364.8694311288517,
+        "y": 603.9712706038123
+      },
+      "data": {
+        "label": "决策树",
+        "category": "Model",
+        "params": {
+          "max_depth": 4,
+          "criterion": "gini"
+        },
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 364.8694311288517,
+        "y": 603.9712706038123
+      }
+    },
+    {
+      "id": "evalNode_1767530177394",
+      "type": "evalNode",
+      "position": {
+        "x": 692.8213803762228,
+        "y": 711.204802620953
+      },
+      "data": {
+        "label": "基础评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "classification",
+          "accuracy": 0.36428571428571427,
+          "confusion_matrix": [
+            [
+              6,
+              2,
+              12,
+              0,
+              0
+            ],
+            [
+              5,
+              1,
+              13,
+              0,
+              0
+            ],
+            [
+              7,
+              1,
+              31,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              11,
+              0,
+              15
+            ],
+            [
+              0,
+              0,
+              14,
+              0,
+              13
+            ]
+          ],
+          "report": {
+            "0": {
+              "precision": 0.3333333333333333,
+              "recall": 0.3,
+              "f1-score": 0.3157894736842105,
+              "support": 20
+            },
+            "1": {
+              "precision": 0.25,
+              "recall": 0.05263157894736842,
+              "f1-score": 0.08695652173913043,
+              "support": 19
+            },
+            "2": {
+              "precision": 0.38271604938271603,
+              "recall": 0.6458333333333334,
+              "f1-score": 0.48062015503875966,
+              "support": 48
+            },
+            "3": {
+              "precision": 0,
+              "recall": 0,
+              "f1-score": 0,
+              "support": 26
+            },
+            "4": {
+              "precision": 0.35135135135135137,
+              "recall": 0.48148148148148145,
+              "f1-score": 0.40625,
+              "support": 27
+            },
+            "accuracy": 0.36428571428571427,
+            "macro avg": {
+              "precision": 0.2634801468134801,
+              "recall": 0.29598927875243664,
+              "f1-score": 0.25792323009242013,
+              "support": 140
+            },
+            "weighted avg": {
+              "precision": 0.280525168025168,
+              "recall": 0.36428571428571427,
+              "f1-score": 0.3000462916327725,
+              "support": 140
+            }
+          }
+        }
+      },
+      "width": 260,
+      "height": 159,
+      "selected": false,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 692.8213803762228,
+        "y": 711.204802620953
+      }
+    },
+    {
+      "id": "algoNode_1767582905427",
+      "type": "algoNode",
+      "position": {
+        "x": 706.4424953975861,
+        "y": 301.8207567583471
+      },
+      "data": {
+        "label": "随机森林",
+        "category": "Model",
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 122,
+      "selected": true,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 706.4424953975861,
+        "y": 301.8207567583471
+      }
+    },
+    {
+      "id": "evalNode_1767583022428",
+      "type": "evalNode",
+      "position": {
+        "x": 994.4359538755391,
+        "y": 315.5583384111496
+      },
+      "data": {
+        "label": "基础评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "classification",
+          "accuracy": 0.37857142857142856,
+          "confusion_matrix": [
+            [
+              5,
+              6,
+              9,
+              0,
+              0
+            ],
+            [
+              5,
+              4,
+              10,
+              0,
+              0
+            ],
+            [
+              6,
+              4,
+              23,
+              5,
+              10
+            ],
+            [
+              0,
+              0,
+              4,
+              11,
+              11
+            ],
+            [
+              0,
+              0,
+              11,
+              6,
+              10
+            ]
+          ],
+          "report": {
+            "0": {
+              "precision": 0.3125,
+              "recall": 0.25,
+              "f1-score": 0.2777777777777778,
+              "support": 20
+            },
+            "1": {
+              "precision": 0.2857142857142857,
+              "recall": 0.21052631578947367,
+              "f1-score": 0.24242424242424243,
+              "support": 19
+            },
+            "2": {
+              "precision": 0.40350877192982454,
+              "recall": 0.4791666666666667,
+              "f1-score": 0.4380952380952381,
+              "support": 48
+            },
+            "3": {
+              "precision": 0.5,
+              "recall": 0.4230769230769231,
+              "f1-score": 0.4583333333333333,
+              "support": 26
+            },
+            "4": {
+              "precision": 0.3225806451612903,
+              "recall": 0.37037037037037035,
+              "f1-score": 0.3448275862068965,
+              "support": 27
+            },
+            "accuracy": 0.37857142857142856,
+            "macro avg": {
+              "precision": 0.3648607405610801,
+              "recall": 0.3466280551806868,
+              "f1-score": 0.35229163556749765,
+              "support": 140
+            },
+            "weighted avg": {
+              "precision": 0.37683335643255605,
+              "recall": 0.37857142857142856,
+              "f1-score": 0.37440856488886043,
+              "support": 140
+            }
+          }
+        }
+      },
+      "width": 260,
+      "height": 159,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 994.4359538755391,
+        "y": 315.5583384111496
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "dataNode_1766988966635",
+      "sourceHandle": null,
+      "target": "algoNode_1767074539755",
+      "targetHandle": null,
+      "id": "reactflow__edge-dataNode_1766988966635-algoNode_1767074539755"
+    },
+    {
+      "source": "algoNode_1767074539755",
+      "sourceHandle": null,
+      "target": "algoNode_1767084435103",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767074539755-algoNode_1767084435103"
+    },
+    {
+      "source": "algoNode_1767084435103",
+      "sourceHandle": null,
+      "target": "algoNode_1767084454393",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767084435103-algoNode_1767084454393"
+    },
+    {
+      "source": "algoNode_1767084454393",
+      "sourceHandle": null,
+      "target": "evalNode_1767084470311",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767084454393-evalNode_1767084470311"
+    },
+    {
+      "source": "dataNode_1766988966635",
+      "sourceHandle": null,
+      "target": "algoNode_1767102797645",
+      "targetHandle": null,
+      "id": "reactflow__edge-dataNode_1766988966635-algoNode_1767102797645"
+    },
+    {
+      "source": "algoNode_1767102797645",
+      "sourceHandle": null,
+      "target": "algoNode_1767102805483",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767102797645-algoNode_1767102805483"
+    },
+    {
+      "source": "algoNode_1767102805483",
+      "sourceHandle": null,
+      "target": "evalNode_1767102811468",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767102805483-evalNode_1767102811468"
+    },
+    {
+      "source": "algoNode_1767084435103",
+      "sourceHandle": null,
+      "target": "algoNode_1767516688155",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767084435103-algoNode_1767516688155"
+    },
+    {
+      "source": "algoNode_1767084435103",
+      "sourceHandle": null,
+      "target": "algoNode_1767516709491",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767084435103-algoNode_1767516709491"
+    },
+    {
+      "source": "algoNode_1767516688155",
+      "sourceHandle": null,
+      "target": "evalNode_1767516730401",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767516688155-evalNode_1767516730401"
+    },
+    {
+      "source": "algoNode_1767516709491",
+      "sourceHandle": null,
+      "target": "evalNode_1767516736682",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767516709491-evalNode_1767516736682"
+    },
+    {
+      "source": "algoNode_1767102797645",
+      "sourceHandle": null,
+      "target": "algoNode_1767530166059",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767102797645-algoNode_1767530166059"
+    },
+    {
+      "source": "algoNode_1767530166059",
+      "sourceHandle": null,
+      "target": "evalNode_1767530177394",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767530166059-evalNode_1767530177394"
+    },
+    {
+      "source": "algoNode_1767084435103",
+      "sourceHandle": null,
+      "target": "algoNode_1767582905427",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767084435103-algoNode_1767582905427"
+    },
+    {
+      "source": "algoNode_1767582905427",
+      "sourceHandle": null,
+      "target": "evalNode_1767583022428",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767582905427-evalNode_1767583022428"
+    }
+  ],
+  "updated_at": 1767751537.3933156
+}

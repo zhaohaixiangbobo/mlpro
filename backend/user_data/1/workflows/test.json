@@ -1,0 +1,53 @@
+{
+  "name": "test",
+  "nodes": [
+    {
+      "id": "dataNode_1766988966635",
+      "type": "dataNode",
+      "position": {
+        "x": 154.5,
+        "y": 213.5
+      },
+      "data": {
+        "label": "数据输入"
+      },
+      "width": 220,
+      "height": 95,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 154.5,
+        "y": 213.5
+      },
+      "dragging": false
+    },
+    {
+      "id": "algoNode_1766988968502",
+      "type": "algoNode",
+      "position": {
+        "x": 458.5,
+        "y": 267.5
+      },
+      "data": {
+        "label": "逻辑回归"
+      },
+      "width": 180,
+      "height": 85,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 458.5,
+        "y": 267.5
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "dataNode_1766988966635",
+      "sourceHandle": null,
+      "target": "algoNode_1766988968502",
+      "targetHandle": null,
+      "id": "reactflow__edge-dataNode_1766988966635-algoNode_1766988968502"
+    }
+  ],
+  "updated_at": 1766988978.6003807
+}

@@ -1,0 +1,34 @@
+#root {
+  height: 100%;
+}
+
+/* Custom Scrollbar for Table */
+.ant-table-body::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ant-table-body::-webkit-scrollbar-thumb {
+  background-color: #d9d9d9;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.ant-table-body::-webkit-scrollbar-thumb:hover {
+  background-color: #bfbfbf;
+}
+.ant-table-body::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* Ensure header cells have appropriate spacing */
+.ant-table-thead > tr > th {
+    padding: 12px 8px !important;
+    font-size: 14px;
+}
+
+/* Dark mode scrollbar support (if app supports class-based dark mode or system preference) */
+@media (prefers-color-scheme: dark) {
+    .ant-table-body::-webkit-scrollbar-thumb {
+        background-color: #434343;
+    }
+}

@@ -1,0 +1,114 @@
+{
+  "name": "test7",
+  "nodes": [
+    {
+      "id": "dataNode_1767749461525",
+      "type": "dataNode",
+      "position": {
+        "x": 43.96568708771278,
+        "y": 186.42025372431507
+      },
+      "data": {
+        "label": "文件输入",
+        "category": "Data",
+        "filename": "train_customers2_train.csv"
+      },
+      "width": 240,
+      "height": 133
+    },
+    {
+      "id": "algoNode_1767749462712",
+      "type": "algoNode",
+      "position": {
+        "x": 438.25192703259216,
+        "y": 214.58355657752074
+      },
+      "data": {
+        "label": "缺失值处理",
+        "category": "Preprocessing",
+        "status": "成功"
+      },
+      "width": 200,
+      "height": 149
+    },
+    {
+      "id": "algoNode_1767749466535",
+      "type": "algoNode",
+      "position": {
+        "x": 647.9874992460335,
+        "y": 128.45514407550448
+      },
+      "data": {
+        "label": "岭回归",
+        "category": "Model",
+        "status": "成功",
+        "error": null
+      },
+      "width": 200,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 647.9874992460335,
+        "y": 128.45514407550448
+      },
+      "dragging": false
+    },
+    {
+      "id": "evalNode_1767749507604",
+      "type": "evalNode",
+      "position": {
+        "x": 863.5791893533845,
+        "y": 40.43620460640774
+      },
+      "data": {
+        "label": "模型评估",
+        "category": "Evaluation",
+        "result": {
+          "type": "regression",
+          "mse": 7640.321464521505,
+          "rmse": 87.40893240694285,
+          "mae": 71.31880609093754,
+          "r2_score": 0.5673524798453415,
+          "prediction_head": [
+            429.53416734704746,
+            457.8349971985163,
+            313.3924015948609,
+            496.9198199421464,
+            326.10002816662137,
+            480.47849528402236,
+            259.4536293643907,
+            310.62158080173214,
+            341.59811916648147,
+            301.2405471107573
+          ]
+        }
+      },
+      "width": 260,
+      "height": 159
+    }
+  ],
+  "edges": [
+    {
+      "source": "dataNode_1767749461525",
+      "sourceHandle": null,
+      "target": "algoNode_1767749462712",
+      "targetHandle": null,
+      "id": "reactflow__edge-dataNode_1767749461525-algoNode_1767749462712"
+    },
+    {
+      "source": "algoNode_1767749462712",
+      "sourceHandle": null,
+      "target": "algoNode_1767749466535",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767749462712-algoNode_1767749466535"
+    },
+    {
+      "source": "algoNode_1767749466535",
+      "sourceHandle": null,
+      "target": "evalNode_1767749507604",
+      "targetHandle": null,
+      "id": "reactflow__edge-algoNode_1767749466535-evalNode_1767749507604"
+    }
+  ],
+  "updated_at": 1767749516.9796078
+}
