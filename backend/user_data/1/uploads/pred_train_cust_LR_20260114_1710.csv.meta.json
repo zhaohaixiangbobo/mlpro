@@ -1,0 +1,118 @@
+{
+  "filename": "pred_train_cust_LR_20260114_1710.csv",
+  "columns": {
+    "年龄": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 6
+    },
+    "性别": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 2
+    },
+    "经营年限": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "商圈": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "业态": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "档位": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 5
+    },
+    "终端类型": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 3
+    },
+    "周购进量（条）": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 87
+    },
+    "周购进金额（元）": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 125
+    },
+    "单条价格（元）": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 59
+    },
+    "品牌宽度": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 96
+    },
+    "卷烟陈列背柜": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 4
+    },
+    "卷烟陈列前柜": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 4
+    },
+    "经营品种数量": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 122
+    },
+    "非烟销售比重": {
+      "type": "category",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 5
+    },
+    "prediction": {
+      "type": "numeric",
+      "missing": 0,
+      "missing_pct": 0.0,
+      "outliers": 0,
+      "unique": 57
+    }
+  },
+  "rows": 140
+}
