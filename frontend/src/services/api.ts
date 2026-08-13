@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: 'http://localhost:8000/api',
-  timeout: 5000, // 5 seconds timeout
+  timeout: 300000, // 5 minutes: ML training / report export can take a while
 });
 
 // Add a request interceptor
@@ -38,14 +38,26 @@ export const getMe = async () => {
     return response.data;
 };
 
-export const uploadData = async (file: File) => {
+export const uploadData = async (file: File, encoding: string = 'auto', delimiter: string = '') => {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('encoding', encoding);
+  formData.append('delimiter', delimiter);
   const response = await api.post('/data/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
   });
+  return response.data;
+};
+
+export const deleteRows = async (filename: string, indices: number[]) => {
+  const response = await api.post('/data/rows/delete', { filename, indices });
+  return response.data;
+};
+
+export const loadDemoData = async (name: string) => {
+  const response = await api.post('/data/demo', { name });
   return response.data;
 };
 
@@ -123,8 +135,34 @@ export const predict = async (payload: {
     data_file: string;
     preprocessing: any[];
     algorithm_label?: string;
+    chain?: any[];
+    column_map?: Record<string, string>;
 }) => {
     const response = await api.post('/workflow/predict', payload);
+    return response.data;
+};
+
+export const getModelFeatures = async (nodeId: string) => {
+    const response = await api.get(`/workflow/model/features/${nodeId}`);
+    return response.data;
+};
+
+export const downloadModel = async (nodeId: string) => {
+    const response = await api.get(`/workflow/model/download/${nodeId}`, {
+        responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `model_${nodeId}.joblib`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+};
+
+export const getRunHistory = async () => {
+    const response = await api.get('/workflow/history');
     return response.data;
 };
 
@@ -144,6 +182,25 @@ export const downloadPrediction = async (filename: string) => {
 
 export const getPCAData = async (filename: string, label_column?: string) => {
     const response = await api.post('/data/pca', { filename, label_column });
+    return response.data;
+};
+
+export const getClusterVisualization = async (payload: {
+    filename: string;
+    algorithm: string;
+    params: Record<string, any>;
+    preprocessing?: any[];
+}) => {
+    const response = await api.post('/data/cluster/visualize', payload);
+    return response.data;
+};
+
+export const getKMeansElbow = async (payload: {
+    filename: string;
+    params: Record<string, any>;
+    preprocessing?: any[];
+}) => {
+    const response = await api.post('/data/cluster/elbow', payload);
     return response.data;
 };
 

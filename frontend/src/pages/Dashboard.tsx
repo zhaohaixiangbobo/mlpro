@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Select, Row, Col, Typography, Table, Tabs, Empty, Spin, Space, Statistic, Divider, Tooltip, Button, Modal, Radio, message } from 'antd';
+import { Card, Select, Row, Col, Typography, Table, Tabs, Empty, Spin, Space, Statistic, Divider, Tooltip, Button, Modal, Radio, message, Tag } from 'antd';
 import { 
     LineChartOutlined, 
     BarChartOutlined, 
@@ -10,10 +10,12 @@ import {
     InfoCircleOutlined,
     DownloadOutlined,
     FilePdfOutlined,
-    FileWordOutlined
+    FileWordOutlined,
+    ClusterOutlined,
+    AimOutlined,
 } from '@ant-design/icons';
-import { Radar, Column, Scatter } from '@ant-design/plots';
-import { listWorkflows, loadWorkflow, getPCAData, exportReport } from '../services/api';
+import { Radar, Column, Scatter, Line, Bar } from '@ant-design/plots';
+import { listWorkflows, loadWorkflow, getPCAData, exportReport, getClusterVisualization, getKMeansElbow } from '../services/api';
 import { defaultParams } from '../components/params/ModelParamsForm';
 
 const { Title, Text } = Typography;
@@ -40,6 +42,12 @@ const Dashboard: React.FC = () => {
     const [hasSuccessfulAlgos, setHasSuccessfulAlgos] = useState(false);
     const [pcaData, setPcaData] = useState<any[]>([]);
     const [loadingPca, setLoadingPca] = useState(false);
+    const [clusterViz, setClusterViz] = useState<any>(null);
+    const [clusterVizLoading, setClusterVizLoading] = useState(false);
+    const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
+    const [elbowData, setElbowData] = useState<any>(null);
+    const [elbowLoading, setElbowLoading] = useState(false);
+    const [workflowGraph, setWorkflowGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
     const [isExportModalVisible, setIsExportModalVisible] = useState(false);
     const [exportFormat, setExportFormat] = useState<'docx' | 'pdf'>('docx');
     const [exporting, setExporting] = useState(false);
@@ -174,21 +182,114 @@ const Dashboard: React.FC = () => {
             });
             
             setAlgoResults(results);
+            setWorkflowGraph({ nodes, edges });
 
-            // If there's a data node and clustering algorithms, fetch PCA
+            // If there's a data node and clustering algorithms, fetch PCA + cluster visualization
             const dataNode = nodes.find((n: any) => n.type === 'dataNode');
             const hasClustering = results.some((r: AlgoResult) => r.category === 'Model' && r.result.type === 'clustering');
             
             if (dataNode && dataNode.data.filename && hasClustering) {
                 fetchPCA(dataNode.data.filename);
+                const clusterAlgos = results.filter((r: AlgoResult) => r.result.type === 'clustering');
+                if (clusterAlgos.length > 0) {
+                    setActiveClusterId(clusterAlgos[0].id);
+                    fetchClusterViz(clusterAlgos[0], dataNode.data.filename, { nodes, edges });
+                }
+                const kmeansAlgo = clusterAlgos.find((r: AlgoResult) => r.label === 'K-Means');
+                if (kmeansAlgo) {
+                    fetchElbow(kmeansAlgo, dataNode.data.filename, { nodes, edges });
+                } else {
+                    setElbowData(null);
+                }
             } else {
                 setPcaData([]);
+                setClusterViz(null);
+                setElbowData(null);
+                setActiveClusterId(null);
             }
 
         } catch (error) {
             console.error("Failed to load workflow data", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // 回溯单个上游链，收集预处理步骤（与工作流页逻辑一致）
+    const buildPreprocessingSteps = (startId: string, nodes: any[], edges: any[]) => {
+        const preNodes: any[] = [];
+        let currentId = startId;
+        let depth = 0;
+        const seen = new Set<string>();
+        while (depth < 30 && !seen.has(currentId)) {
+            seen.add(currentId);
+            const inputEdge = edges.find((e: any) => e.target === currentId);
+            if (!inputEdge) break;
+            const src = nodes.find((n: any) => n.id === inputEdge.source);
+            if (!src) break;
+            if (src.type === 'dataNode') break;
+            if (src.type === 'algoNode' && src.data.category === 'Preprocessing') {
+                preNodes.unshift(src);
+                currentId = src.id;
+            } else {
+                break;
+            }
+            depth++;
+        }
+        return preNodes.map(n => {
+            let method = n.data.params?.method;
+            if (!method) {
+                if (n.data.label === '缺失值处理') method = 'mean';
+                else if (n.data.label === '中位数填充') method = 'median';
+                else if (n.data.label === '众数填充') method = 'mode';
+                else if (n.data.label === '删除缺失行') method = 'drop';
+                else if (n.data.label === '标准化') method = 'standard';
+                else if (n.data.label === '归一化') method = 'minmax';
+            }
+            return { method, params: n.data.params || {} };
+        });
+    };
+
+    const fetchClusterViz = async (algo: AlgoResult, filename: string, graph: { nodes: any[]; edges: any[] }) => {
+        setClusterVizLoading(true);
+        try {
+            const pre = buildPreprocessingSteps(algo.id, graph.nodes, graph.edges);
+            const data = await getClusterVisualization({
+                filename,
+                algorithm: algo.label,
+                params: algo.params || {},
+                preprocessing: pre,
+            });
+            setClusterViz(data);
+        } catch (error: any) {
+            console.error("Cluster visualization failed", error);
+            setClusterViz(null);
+            message.warning(`聚类可视化失败: ${error?.response?.data?.detail || '请确认模型参数有效'}`);
+        } finally {
+            setClusterVizLoading(false);
+        }
+    };
+
+    const fetchElbow = async (algo: AlgoResult, filename: string, graph: { nodes: any[]; edges: any[] }) => {
+        setElbowLoading(true);
+        try {
+            const pre = buildPreprocessingSteps(algo.id, graph.nodes, graph.edges);
+            const data = await getKMeansElbow({ filename, params: algo.params || {}, preprocessing: pre });
+            setElbowData(data);
+        } catch (error: any) {
+            console.error("Elbow analysis failed", error);
+            setElbowData(null);
+        } finally {
+            setElbowLoading(false);
+        }
+    };
+
+    const handleClusterAlgoChange = (id: string) => {
+        setActiveClusterId(id);
+        const algo = algoResults.find(r => r.id === id);
+        const dataNode = workflowGraph.nodes.find((n: any) => n.type === 'dataNode');
+        if (algo && dataNode?.data.filename) {
+            fetchClusterViz(algo, dataNode.data.filename, workflowGraph);
         }
     };
 
@@ -329,6 +430,14 @@ const Dashboard: React.FC = () => {
                 }
             },
             {
+                title: 'CV 平均',
+                key: 'cv',
+                render: (record: AlgoResult) => {
+                    const v = record.result.cv_mean;
+                    return v === undefined || v === null ? '-' : <Text type="secondary">{v.toFixed(4)}</Text>;
+                }
+            },
+            {
                 title: '主要参数',
                 key: 'params',
                 width: PARAMS_COL_WIDTH,
@@ -386,7 +495,7 @@ const Dashboard: React.FC = () => {
                                 size="small"
                                 rowKey="id"
                                 tableLayout="fixed"
-                                scroll={{ x: 700, y: 300 }}
+                                scroll={{ x: 800, y: 300 }}
                             />
                         </Card>
                     </Col>
@@ -397,31 +506,133 @@ const Dashboard: React.FC = () => {
                     <>
                         <Divider>算法详情报告</Divider>
                         <Row gutter={[16, 16]}>
-                            {classificationData.map(algo => (
-                                <Col span={12} key={algo.id}>
-                                    <Card size="small" title={`${algo.label} 详细报告`}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 16 }}>
-                                            <Statistic title="Accuracy" value={algo.result.accuracy} precision={4} />
-                                            <Statistic title="Weighted F1" value={algo.result.report?.['weighted avg']?.['f1-score']} precision={4} />
-                                            <Statistic title="样本总数" value={algo.result.report?.['macro avg']?.['support'] || algo.result.report?.['weighted avg']?.['support']} />
-                                        </div>
-                                        <Table 
-                                            dataSource={Object.entries(algo.result.report || {})
-                                                .filter(([key]) => !['accuracy', 'macro avg', 'weighted avg'].includes(key))
-                                                .map(([key, val]: [string, any]) => ({ class: key, ...val }))}
-                                            columns={[
-                                                { title: '类别', dataIndex: 'class', key: 'class' },
-                                                { title: '样本数', dataIndex: 'support', key: 's' },
-                                                { title: 'Precision', dataIndex: 'precision', key: 'p', render: (v) => v.toFixed(3) },
-                                                { title: 'Recall', dataIndex: 'recall', key: 'r', render: (v) => v.toFixed(3) },
-                                                { title: 'F1', dataIndex: 'f1-score', key: 'f', render: (v) => v.toFixed(3) },
-                                            ]}
-                                            pagination={false}
-                                            size="small"
-                                        />
-                                    </Card>
-                                </Col>
-                            ))}
+                            {classificationData.map(algo => {
+                                const result = algo.result;
+                                const lc = result.learning_curve;
+                                const fi = result.feature_importance;
+                                const proba = result.probabilities;
+                                const tabItems: any[] = [
+                                    {
+                                        key: 'perclass',
+                                        label: '类别明细',
+                                        children: (
+                                            <Table 
+                                                dataSource={Object.entries(result.report || {})
+                                                    .filter(([key]) => !['accuracy', 'macro avg', 'weighted avg'].includes(key))
+                                                    .map(([key, val]: [string, any]) => ({ class: key, ...val }))}
+                                                columns={[
+                                                    { title: '类别', dataIndex: 'class', key: 'class' },
+                                                    { title: '样本数', dataIndex: 'support', key: 's' },
+                                                    { title: 'Precision', dataIndex: 'precision', key: 'p', render: (v) => v.toFixed(3) },
+                                                    { title: 'Recall', dataIndex: 'recall', key: 'r', render: (v) => v.toFixed(3) },
+                                                    { title: 'F1', dataIndex: 'f1-score', key: 'f', render: (v) => v.toFixed(3) },
+                                                ]}
+                                                pagination={false}
+                                                size="small"
+                                            />
+                                        ),
+                                    },
+                                ];
+                                if (lc) {
+                                    const lcData = [
+                                        ...lc.train_sizes.map((s: number, i: number) => ({ size: Math.round(s), score: lc.train_scores[i], type: '训练集' })),
+                                        ...lc.train_sizes.map((s: number, i: number) => ({ size: Math.round(s), score: lc.test_scores[i], type: '测试集' })),
+                                    ];
+                                    tabItems.push({
+                                        key: 'lc',
+                                        label: '学习曲线',
+                                        children: (
+                                            <Line
+                                                data={lcData}
+                                                xField="size"
+                                                yField="score"
+                                                seriesField="type"
+                                                height={280}
+                                                color={['#1677ff', '#fa541c']}
+                                                point={{ size: 3 }}
+                                                legend={{ position: 'top' }}
+                                                meta={{
+                                                    size: { alias: '训练样本数' },
+                                                    score: { alias: '得分' },
+                                                }}
+                                                tooltip={{
+                                                    formatter: (d: any) => ({ name: d.type, value: Number(d.score).toFixed(4) }),
+                                                }}
+                                            />
+                                        ),
+                                    });
+                                }
+                                if (fi && fi.length > 0) {
+                                    tabItems.push({
+                                        key: 'fi',
+                                        label: '特征重要性',
+                                        children: (
+                                            <Bar
+                                                data={fi.slice(0, 15)}
+                                                xField="feature"
+                                                yField="importance"
+                                                height={280}
+                                                color="#722ed1"
+                                                barStyle={{ radius: [4, 4, 0, 0] }}
+                                                meta={{
+                                                    feature: { alias: '特征' },
+                                                    importance: { alias: '重要性' },
+                                                }}
+                                                tooltip={{
+                                                    formatter: (d: any) => ({
+                                                        name: d.feature,
+                                                        value: `重要性=${Number(d.importance).toFixed(4)}`,
+                                                    }),
+                                                }}
+                                            />
+                                        ),
+                                    });
+                                }
+                                if (proba && proba.length > 0) {
+                                    const probCols = Object.keys(proba[0]).filter(k => k.startsWith('p('));
+                                    tabItems.push({
+                                        key: 'prob',
+                                        label: '概率输出',
+                                        children: (
+                                            <Table
+                                                dataSource={proba}
+                                                rowKey={(_, i) => String(i)}
+                                                pagination={false}
+                                                size="small"
+                                                scroll={{ x: 600 }}
+                                                columns={[
+                                                    { title: '实际类别', dataIndex: 'actual', key: 'actual' },
+                                                    { title: '预测类别', dataIndex: 'predicted', key: 'predicted' },
+                                                    ...probCols.map(k => ({
+                                                        title: k,
+                                                        dataIndex: k,
+                                                        key: k,
+                                                        width: 100,
+                                                        render: (v: number) => v === undefined || v === null ? '-' : Number(v).toFixed(4),
+                                                    })),
+                                                ]}
+                                            />
+                                        ),
+                                    });
+                                }
+                                return (
+                                    <Col span={12} key={algo.id}>
+                                        <Card size="small" title={`${algo.label} 详细报告`}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                                                <Statistic title="Accuracy" value={result.accuracy} precision={4} />
+                                                <Statistic title="Weighted F1" value={result.report?.['weighted avg']?.['f1-score']} precision={4} />
+                                                <Statistic title="样本总数" value={result.report?.['macro avg']?.['support'] || result.report?.['weighted avg']?.['support']} />
+                                                {result.cv_mean !== undefined && (
+                                                    <Tooltip title="K-Fold 交叉验证平均得分（默认 5 折）">
+                                                        <Statistic title="CV 平均得分" value={result.cv_mean} precision={4} valueStyle={{ color: '#1890ff' }} />
+                                                    </Tooltip>
+                                                )}
+                                            </div>
+                                            <Tabs size="small" items={tabItems} />
+                                        </Card>
+                                    </Col>
+                                );
+                            })}
                         </Row>
                     </>
                 )}
@@ -528,6 +739,12 @@ const Dashboard: React.FC = () => {
                                         }
                                     },
                                     {
+                                        title: 'CV 平均 R2',
+                                        dataIndex: ['result', 'cv_mean'],
+                                        key: 'cv',
+                                        render: (v: number | undefined) => v === undefined || v === null ? '-' : <Text type="secondary">{v.toFixed(4)}</Text>,
+                                    },
+                                    {
                                         title: '主要参数',
                                         key: 'params',
                                         width: PARAMS_COL_WIDTH,
@@ -539,11 +756,136 @@ const Dashboard: React.FC = () => {
                                 size="small"
                                 rowKey="id"
                                 tableLayout="fixed"
-                                scroll={{ x: 600, y: 300 }}
+                                scroll={{ x: 700, y: 300 }}
                             />
                         </Card>
                     </Col>
                 </Row>
+
+                {/* Regression per-algorithm detail: residual / learning curve / feature importance */}
+                {regressionData.length > 0 && (
+                    <>
+                        <Divider>回归算法详情报告</Divider>
+                        <Row gutter={[16, 16]}>
+                            {regressionData.map(algo => {
+                                const result = algo.result;
+                                const lc = result.learning_curve;
+                                const fi = result.feature_importance;
+                                const residuals = result.residuals;
+                                const tabItems: any[] = [];
+                                if (residuals && residuals.length > 0) {
+                                    tabItems.push({
+                                        key: 'res',
+                                        label: '残差分析',
+                                        children: (
+                                            <div>
+                                                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                                                    实际值 vs 预测值散点（颜色表示残差大小），虚线为 y=x 理想线
+                                                </Text>
+                                                <Scatter
+                                                    data={residuals}
+                                                    xField="actual"
+                                                    yField="predicted"
+                                                    colorField="residual"
+                                                    size={4}
+                                                    shape="circle"
+                                                    pointStyle={{ fillOpacity: 0.7 }}
+                                                    color={['#13c2c2', '#f5222d']}
+                                                    annotations={[{
+                                                        type: 'line',
+                                                        start: ['min', 'min'],
+                                                        end: ['max', 'max'],
+                                                        style: { stroke: '#faad14', lineWidth: 1.5, lineDash: [4, 4] },
+                                                    }]}
+                                                    tooltip={{
+                                                        fields: ['actual', 'predicted', 'residual'],
+                                                        formatter: (d: any) => ({
+                                                            name: `残差=${Number(d.residual).toFixed(4)}`,
+                                                            value: `实际=${Number(d.actual).toFixed(3)}, 预测=${Number(d.predicted).toFixed(3)}`,
+                                                        }),
+                                                    }}
+                                                />
+                                            </div>
+                                        ),
+                                    });
+                                }
+                                if (lc) {
+                                    const lcData = [
+                                        ...lc.train_sizes.map((s: number, i: number) => ({ size: Math.round(s), score: lc.train_scores[i], type: '训练集' })),
+                                        ...lc.train_sizes.map((s: number, i: number) => ({ size: Math.round(s), score: lc.test_scores[i], type: '测试集' })),
+                                    ];
+                                    tabItems.push({
+                                        key: 'lc',
+                                        label: '学习曲线',
+                                        children: (
+                                            <Line
+                                                data={lcData}
+                                                xField="size"
+                                                yField="score"
+                                                seriesField="type"
+                                                height={280}
+                                                color={['#1677ff', '#fa541c']}
+                                                point={{ size: 3 }}
+                                                legend={{ position: 'top' }}
+                                                meta={{
+                                                    size: { alias: '训练样本数' },
+                                                    score: { alias: 'R2 得分' },
+                                                }}
+                                                tooltip={{
+                                                    formatter: (d: any) => ({ name: d.type, value: Number(d.score).toFixed(4) }),
+                                                }}
+                                            />
+                                        ),
+                                    });
+                                }
+                                if (fi && fi.length > 0) {
+                                    tabItems.push({
+                                        key: 'fi',
+                                        label: '特征重要性',
+                                        children: (
+                                            <Bar
+                                                data={fi.slice(0, 15)}
+                                                xField="feature"
+                                                yField="importance"
+                                                height={280}
+                                                color="#13c2c2"
+                                                barStyle={{ radius: [4, 4, 0, 0] }}
+                                                meta={{
+                                                    feature: { alias: '特征' },
+                                                    importance: { alias: '重要性 (|系数|)' },
+                                                }}
+                                                tooltip={{
+                                                    formatter: (d: any) => ({
+                                                        name: d.feature,
+                                                        value: `重要性=${Number(d.importance).toFixed(4)}${d.coef !== undefined ? `, 系数=${Number(d.coef).toFixed(4)}` : ''}`,
+                                                    }),
+                                                }}
+                                            />
+                                        ),
+                                    });
+                                }
+                                if (tabItems.length === 0) return null;
+                                return (
+                                    <Col span={12} key={algo.id}>
+                                        <Card size="small" title={`${algo.label} 详细报告`}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                                                <Statistic title="R2 Score" value={result.r2_score} precision={4} />
+                                                <Statistic title="MAE" value={result.mae} precision={4} />
+                                                <Statistic title="RMSE" value={result.rmse} precision={4} />
+                                                {result.cv_mean !== undefined && (
+                                                    <Tooltip title="K-Fold 交叉验证平均 R2（默认 5 折）">
+                                                        <Statistic title="CV 平均 R2" value={result.cv_mean} precision={4} valueStyle={{ color: '#1890ff' }} />
+                                                    </Tooltip>
+                                                )}
+                                            </div>
+                                            <Tabs size="small" items={tabItems} />
+                                        </Card>
+                                    </Col>
+                                );
+                            })}
+                        </Row>
+                    </>
+                )}
             </div>
         );
     };
@@ -638,6 +980,147 @@ const Dashboard: React.FC = () => {
                                 tableLayout="fixed"
                                 scroll={{ x: 600, y: 300 }}
                             />
+                        </Card>
+                    </Col>
+                </Row>
+
+                {/* 聚类结果散点图（按簇着色） + K-Means 肘部法则 */}
+                <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                    <Col span={12}>
+                        <Card 
+                            title={<Space><ClusterOutlined />聚类结果散点图 (按簇着色)</Space>} 
+                            style={{ height: 520, overflow: 'hidden' }} 
+                            bodyStyle={{ padding: 12, overflow: 'hidden' }}
+                            loading={clusterVizLoading}
+                            extra={
+                                <Space>
+                                    {clusteringData.length > 1 && (
+                                        <Select
+                                            size="small"
+                                            style={{ width: 170 }}
+                                            value={activeClusterId || undefined}
+                                            onChange={handleClusterAlgoChange}
+                                            placeholder="选择聚类算法"
+                                        >
+                                            {clusteringData.map(c => (
+                                                <Option key={c.id} value={c.id}>{c.label}</Option>
+                                            ))}
+                                        </Select>
+                                    )}
+                                    <Tooltip title="此图展示聚类算法的真实输出：每个点代表一个样本，颜色表示其所属簇。运行聚类模型后，将数据 PCA 投影到二维平面并按簇标签着色。灰色点为噪声（DBSCAN）。">
+                                        <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
+                                    </Tooltip>
+                                </Space>
+                            }
+                        >
+                            <div style={{ height: 440 }}>
+                                {clusterViz && clusterViz.points && clusterViz.points.length > 0 ? (
+                                    (() => {
+                                        const vizPoints = clusterViz.points.map((p: any) => ({
+                                            x: p.x,
+                                            y: p.y,
+                                            cluster: p.cluster === -1 ? '噪声' : `簇 ${p.cluster}`,
+                                        }));
+                                        const uniqClusters = Array.from(new Set(vizPoints.map((p: any) => p.cluster))).sort();
+                                        const palette = uniqClusters.map((c, i) =>
+                                            c === '噪声' ? '#8c8c8c' : `hsl(${Math.round((i * 360) / Math.max(1, uniqClusters.length - 1))}, 60%, 50%)`
+                                        );
+                                        return (
+                                            <div>
+                                                <Space style={{ marginBottom: 8 }} wrap>
+                                                    <Tag color="blue">簇数量: {clusterViz.n_clusters}</Tag>
+                                                    {clusterViz.n_noise > 0 && <Tag color="default">噪声点: {clusterViz.n_noise}</Tag>}
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>{clusterViz.algorithm}</Text>
+                                                </Space>
+                                                <Scatter 
+                                                    data={vizPoints}
+                                                    xField="x"
+                                                    yField="y"
+                                                    colorField="cluster"
+                                                    size={4}
+                                                    shape="circle"
+                                                    pointStyle={{ fillOpacity: 0.65 }}
+                                                    color={palette}
+                                                    legend={uniqClusters.length > 20 ? false : { position: 'bottom' }}
+                                                    appendPadding={[10, 10, 10, 10]}
+                                                    tooltip={{
+                                                        fields: ['x', 'y', 'cluster'],
+                                                        formatter: (datum: any) => ({
+                                                            name: '所属簇',
+                                                            value: datum.cluster,
+                                                        }),
+                                                    }}
+                                                />
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <Empty description={clusterVizLoading ? '计算中...' : '暂无聚类结果数据'} style={{ marginTop: 120 }} />
+                                )}
+                            </div>
+                        </Card>
+                    </Col>
+                    <Col span={12}>
+                        <Card 
+                            title={<Space><AimOutlined />K-Means 肘部法则 (选 K 辅助)</Space>} 
+                            style={{ height: 520, overflow: 'hidden' }} 
+                            bodyStyle={{ padding: 12, overflow: 'hidden' }}
+                            loading={elbowLoading}
+                            extra={
+                                <Tooltip title="对不同 K 值训练 K-Means 并计算 SSE（簇内平方和）与轮廓系数。SSE 曲线拐点（肘部）与轮廓系数峰值可辅助选择最佳簇数量。">
+                                    <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
+                                </Tooltip>
+                            }
+                        >
+                            <div style={{ height: 440 }}>
+                                {elbowData && elbowData.ks ? (
+                                    (() => {
+                                        const inertiaData = elbowData.ks.map((k: number, i: number) => ({
+                                            k: `${k} 簇`,
+                                            sse: elbowData.inertia[i],
+                                        }));
+                                        const silhouetteData = elbowData.ks
+                                            .map((k: number, i: number) => ({ k: `${k} 簇`, silhouette: elbowData.silhouette[i] }))
+                                            .filter((d: any) => d.silhouette !== null);
+                                        return (
+                                            <div>
+                                                <Space style={{ marginBottom: 4 }} wrap>
+                                                    <Text strong style={{ fontSize: 13 }}>SSE (簇内平方和)</Text>
+                                                    {elbowData.recommended_k !== null && elbowData.recommended_k !== undefined && (
+                                                        <Tag color="green" icon={<AimOutlined />}>推荐 K = {elbowData.recommended_k} (轮廓系数最大)</Tag>
+                                                    )}
+                                                </Space>
+                                                <Line
+                                                    data={inertiaData}
+                                                    xField="k"
+                                                    yField="sse"
+                                                    height={150}
+                                                    color="#1677ff"
+                                                    point={{ size: 4, style: { fill: '#1677ff' } }}
+                                                    meta={{ k: { alias: '簇数量' }, sse: { alias: 'SSE' } }}
+                                                    tooltip={{ formatter: (d: any) => ({ name: 'SSE', value: Number(d.sse).toFixed(2) }) }}
+                                                />
+                                                <Divider style={{ margin: '8px 0' }} />
+                                                <Space style={{ marginBottom: 4 }}>
+                                                    <Text strong style={{ fontSize: 13 }}>轮廓系数 (越大越好)</Text>
+                                                </Space>
+                                                <Line
+                                                    data={silhouetteData}
+                                                    xField="k"
+                                                    yField="silhouette"
+                                                    height={150}
+                                                    color="#52c41a"
+                                                    point={{ size: 4, style: { fill: '#52c41a' } }}
+                                                    meta={{ k: { alias: '簇数量' }, silhouette: { alias: '轮廓系数' } }}
+                                                    tooltip={{ formatter: (d: any) => ({ name: '轮廓系数', value: Number(d.silhouette).toFixed(4) }) }}
+                                                />
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <Empty description="当前工作流无 K-Means 模型，肘部法则仅适用于 K-Means" style={{ marginTop: 120 }} />
+                                )}
+                            </div>
                         </Card>
                     </Col>
                 </Row>

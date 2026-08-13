@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import './App.css';
 import AlgorithmIntro from './pages/AlgorithmIntro';
+import ModelCompare from './pages/ModelCompare';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isAuthenticated, loading } = useAuth();
@@ -40,6 +41,7 @@ const App: React.FC = () => {
             <Route path="workflow" element={<Workflow />} />
             <Route path="prediction" element={<Prediction />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="compare" element={<ModelCompare />} />
             <Route path="algorithms" element={<AlgorithmIntro />} />
           </Route>
         </Routes>

@@ -32,8 +32,11 @@ const Sidebar = () => {
       icon: <ToolOutlined />,
       items: [
         { type: 'algoNode', label: '缺失值处理', category: 'Preprocessing' },
+        { type: 'algoNode', label: '中位数填充', category: 'Preprocessing' },
+        { type: 'algoNode', label: '众数填充', category: 'Preprocessing' },
+        { type: 'algoNode', label: '删除缺失行', category: 'Preprocessing' },
         { type: 'algoNode', label: '标准化', category: 'Preprocessing' },
-        // { type: 'algoNode', label: '特征选择', category: 'Preprocessing' },
+        { type: 'algoNode', label: '归一化', category: 'Preprocessing' },
       ]
     },
     {

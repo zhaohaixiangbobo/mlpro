@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Select, Button, Upload, Table, message, Row, Col, Typography, Steps, Divider, Tooltip } from 'antd';
+import { Card, Select, Button, Upload, Table, message, Row, Col, Typography, Steps, Divider, Tooltip, Modal, Alert } from 'antd';
 import { CloudUploadOutlined, RobotOutlined, DownloadOutlined } from '@ant-design/icons';
-import { listWorkflows, loadWorkflow, listFiles, uploadData, predict, downloadPrediction, getPreview } from '../services/api';
+import { listWorkflows, loadWorkflow, listFiles, uploadData, predict, downloadPrediction, getPreview, getModelFeatures, downloadModel } from '../services/api';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -40,6 +40,11 @@ const Prediction: React.FC = () => {
     const [dataLoading, setDataLoading] = useState<boolean>(false);
     const [currentFilename, setCurrentFilename] = useState<string | null>(null);
 
+    // Column mapping state
+    const [mappingModalVisible, setMappingModalVisible] = useState(false);
+    const [mappingContext, setMappingContext] = useState<{ features: string[]; fileCols: string[] }>({ features: [], fileCols: [] });
+    const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+
     // Load state from localStorage on mount
     useEffect(() => {
         const savedState = localStorage.getItem('mlpro_prediction_state');
@@ -62,6 +67,10 @@ const Prediction: React.FC = () => {
             }
         }
     }, []);
+
+    // Loaded workflow graph (for chain tracing)
+    const workflowNodesRef = React.useRef<any[]>([]);
+    const workflowEdgesRef = React.useRef<any[]>([]);
 
     // Save state whenever it changes
     useEffect(() => {
@@ -147,7 +156,10 @@ const Prediction: React.FC = () => {
         try {
             const res = await listFiles();
             if (res.files) {
-                setFileList(res.files);
+                // 只列出可用于预测的输入文件：原始数据 + 自动测试集（排除划分文件/预测结果文件）
+                setFileList(res.files
+                    .filter((f: any) => f.role === 'source' || f.role === 'auto_test')
+                    .map((f: any) => f.filename));
             }
         } catch (error) {
             console.error(error);
@@ -166,43 +178,11 @@ const Prediction: React.FC = () => {
             // Parse nodes to find successful AlgoNodes
             const nodes = data.nodes || [];
             const edges = data.edges || [];
-            
-            // Helper to trace back preprocessing
-            const getPreprocessing = (nodeId: string) => {
-                const steps: any[] = [];
-                let currentId = nodeId;
-                let depth = 0;
-                while (depth < 20) {
-                    const edge = edges.find((e: any) => e.target === currentId);
-                    if (!edge) break;
-                    const sourceNode = nodes.find((n: any) => n.id === edge.source);
-                    if (!sourceNode) break;
-                    
-                    if (sourceNode.data.category === 'Preprocessing') {
-                        // Reconstruct step
-                        let method = sourceNode.data.params?.method;
-                        if (!method) {
-                            if (sourceNode.data.label === '缺失值处理') method = 'mean';
-                            else if (sourceNode.data.label === '标准化') method = 'standard';
-                            else if (sourceNode.data.label === '归一化') method = 'minmax';
-                        }
-                        steps.unshift({
-                            method: method,
-                            params: sourceNode.data.params || {}
-                        });
-                        currentId = sourceNode.id;
-                    } else if (sourceNode.type === 'dataNode') {
-                        break;
-                    } else {
-                        break;
-                    }
-                    depth++;
-                }
-                return steps;
-            };
+            workflowNodesRef.current = nodes;
+            workflowEdgesRef.current = edges;
 
             const successAlgos = nodes
-                .filter((n: any) => n.type === 'algoNode' && n.data.category === 'Model' && n.data.status === '成功')
+                .filter((n: any) => n.type === 'algoNode' && n.data.category === 'Model' && n.data.status === '成功' && n.data.label !== 'DBSCAN')
                 .map((n: any) => ({
                     id: n.id,
                     label: n.data.label,
@@ -218,13 +198,85 @@ const Prediction: React.FC = () => {
             }
 
             if (successAlgos.length === 0) {
-                message.warning("该工作流中没有已训练成功的模型");
+                const hasDbscan = nodes.some((n: any) =>
+                    n.type === 'algoNode' && n.data.category === 'Model' && n.data.status === '成功' && n.data.label === 'DBSCAN'
+                );
+                if (hasDbscan) {
+                    message.info("该工作流仅有 DBSCAN 模型：DBSCAN 只支持聚类分析，不支持对未知数据预测");
+                } else {
+                    message.warning("该工作流中没有已训练成功的模型");
+                }
             }
         } catch (error) {
             message.error("加载工作流详情失败");
         } finally {
             setLoading(false);
         }
+    };
+
+    // Helper to trace back preprocessing steps for a node
+    const getPreprocessing = (nodeId: string) => {
+        const nodes = workflowNodesRef.current;
+        const edges = workflowEdgesRef.current;
+        const steps: any[] = [];
+        let currentId = nodeId;
+        let depth = 0;
+        while (depth < 20) {
+            const edge = edges.find((e: any) => e.target === currentId);
+            if (!edge) break;
+            const sourceNode = nodes.find((n: any) => n.id === edge.source);
+            if (!sourceNode) break;
+
+            if (sourceNode.data.category === 'Preprocessing') {
+                let method = sourceNode.data.params?.method;
+                if (!method) {
+                    if (sourceNode.data.label === '缺失值处理') method = 'mean';
+                    else if (sourceNode.data.label === '中位数填充') method = 'median';
+                    else if (sourceNode.data.label === '众数填充') method = 'mode';
+                    else if (sourceNode.data.label === '删除缺失行') method = 'drop';
+                    else if (sourceNode.data.label === '标准化') method = 'standard';
+                    else if (sourceNode.data.label === '归一化') method = 'minmax';
+                }
+                steps.unshift({
+                    method: method,
+                    params: sourceNode.data.params || {}
+                });
+                currentId = sourceNode.id;
+            } else if (sourceNode.type === 'dataNode') {
+                break;
+            } else {
+                break;
+            }
+            depth++;
+        }
+        return steps;
+    };
+
+    // Trace chain model nodes (model chaining): upstream Model nodes feeding this model
+    const getChain = (nodeId: string) => {
+        const nodes = workflowNodesRef.current;
+        const edges = workflowEdgesRef.current;
+        const chain: any[] = [];
+        let currentId = nodeId;
+        let depth = 0;
+        while (depth < 20) {
+            const edge = edges.find((e: any) => e.target === currentId);
+            if (!edge) break;
+            const sourceNode = nodes.find((n: any) => n.id === edge.source);
+            if (!sourceNode) break;
+            if (sourceNode.type === 'algoNode' && sourceNode.data.category === 'Model' && sourceNode.data.status === '成功') {
+                chain.unshift({
+                    node_id: sourceNode.id,
+                    algorithm_label: sourceNode.data.label,
+                    preprocessing: getPreprocessing(sourceNode.id),
+                });
+                currentId = sourceNode.id;
+            } else {
+                break;
+            }
+            depth++;
+        }
+        return chain;
     };
 
     const handleUpload = async (options: any) => {
@@ -244,11 +296,8 @@ const Prediction: React.FC = () => {
         }
     };
 
-    const handlePredict = async () => {
-        if (!selectedAlgoId || !selectedFile) {
-            message.error("请选择模型和预测文件");
-            return;
-        }
+    const doPredict = async (columnMap?: Record<string, string>) => {
+        if (!selectedAlgoId || !selectedFile) return;
 
         const algo = algorithms.find(a => a.id === selectedAlgoId);
         if (!algo) return;
@@ -259,9 +308,11 @@ const Prediction: React.FC = () => {
                 node_id: selectedAlgoId,
                 data_file: selectedFile,
                 preprocessing: algo.preprocessing || [],
-                algorithm_label: algo.label
+                algorithm_label: algo.label,
+                chain: getChain(selectedAlgoId),
+                column_map: columnMap,
             });
-            
+
             if (res.status === 'success') {
                 message.success("预测成功");
                 setPredictionResult(res.result);
@@ -274,6 +325,45 @@ const Prediction: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handlePredict = async () => {
+        if (!selectedAlgoId || !selectedFile) {
+            message.error("请选择模型和预测文件");
+            return;
+        }
+
+        // Check for missing features and offer column mapping
+        try {
+            const featRes = await getModelFeatures(selectedAlgoId);
+            const features: string[] = featRes.features || [];
+            if (features.length === 0) {
+                // Clustering models etc. - no feature names available
+                await doPredict(undefined);
+                return;
+            }
+            const previewRes = await getPreview(selectedFile, 1, 1);
+            const fileCols: string[] = (previewRes.columns || []).map((c: any) => c.dataIndex);
+            const missing = features.filter(f => !fileCols.includes(f));
+            if (missing.length === 0) {
+                await doPredict(undefined);
+                return;
+            }
+            // Open column mapping modal
+            setMappingContext({ features, fileCols });
+            setColumnMapping({});
+            setMappingModalVisible(true);
+        } catch (error: any) {
+            // Feature check failed (e.g. model missing) - fall back to direct predict
+            await doPredict(undefined);
+        }
+    };
+
+    const mappingHasUnmapped = mappingContext.features.some(f => !columnMapping[f]);
+
+    const handleMappingConfirm = async () => {
+        setMappingModalVisible(false);
+        await doPredict(columnMapping);
     };
 
     const handleDownload = async () => {
@@ -319,17 +409,30 @@ const Prediction: React.FC = () => {
                                 {
                                     title: "选择模型",
                                     description: (
-                                        <Select 
-                                            style={{ width: '100%', marginTop: 8 }} 
-                                            placeholder="选择已训练的模型"
-                                            disabled={!selectedWorkflow}
-                                            value={selectedAlgoId}
-                                            onChange={setSelectedAlgoId}
-                                        >
-                                            {algorithms.map(a => (
-                                                <Option key={a.id} value={a.id}>{a.label} ({a.id.split('_')[1]})</Option>
-                                            ))}
-                                        </Select>
+                                        <div style={{ marginTop: 8 }}>
+                                            <Select 
+                                                style={{ width: '100%' }} 
+                                                placeholder="选择已训练的模型"
+                                                disabled={!selectedWorkflow}
+                                                value={selectedAlgoId}
+                                                onChange={setSelectedAlgoId}
+                                            >
+                                                {algorithms.map(a => (
+                                                    <Option key={a.id} value={a.id}>{a.label} ({a.id.split('_')[1]})</Option>
+                                                ))}
+                                            </Select>
+                                            {selectedAlgoId && (
+                                                <Button
+                                                    icon={<DownloadOutlined />}
+                                                    block
+                                                    size="small"
+                                                    style={{ marginTop: 8 }}
+                                                    onClick={() => downloadModel(selectedAlgoId)}
+                                                >
+                                                    下载模型文件 (joblib)
+                                                </Button>
+                                            )}
+                                        </div>
                                     )
                                 },
                                 {
@@ -343,9 +446,10 @@ const Prediction: React.FC = () => {
                                                 onChange={setSelectedFile}
                                             >
                                                 {fileList.map(f => (
-                                                    <Option key={f} value={f}>{f}</Option>
-                                                ))}
-                                            </Select>
+                                                    <Option key={f} value={f}>
+                                                        {f}{f.includes('_auto_test.') ? '（留出测试集·训练时自动划分）' : ''}
+                                                    </Option>
+                                                ))}                                            </Select>
                                             <Upload customRequest={handleUpload} showUploadList={false}>
                                                 <Button icon={<CloudUploadOutlined />} block>上传新文件</Button>
                                             </Upload>
@@ -413,6 +517,44 @@ const Prediction: React.FC = () => {
                     </Card>
                 </Col>
             </Row>
+
+            {/* Column Mapping Modal */}
+            <Modal
+                title="列映射"
+                open={mappingModalVisible}
+                onOk={handleMappingConfirm}
+                onCancel={() => setMappingModalVisible(false)}
+                okText="确认并预测"
+                cancelText="取消"
+                okButtonProps={{ disabled: mappingHasUnmapped }}
+                width={600}
+            >
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="预测文件缺少模型训练时使用的部分特征列"
+                    description={`请为以下 ${mappingContext.features.length} 个特征指定对应的预测文件列；未映射的列将被忽略。`}
+                    style={{ marginBottom: 16 }}
+                />
+                {mappingContext.features.map(f => {
+                    const used = Object.values(columnMapping).filter(Boolean);
+                    const options = mappingContext.fileCols.filter(c => !used.includes(c) || columnMapping[f] === c);
+                    return (
+                        <div key={f} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                            <div style={{ width: 200, fontWeight: 500 }}>{f}</div>
+                            <Select
+                                style={{ flex: 1 }}
+                                placeholder="选择对应的列"
+                                value={columnMapping[f]}
+                                onChange={(v) => setColumnMapping(m => ({ ...m, [f]: v }))}
+                                showSearch
+                            >
+                                {options.map(c => <Option key={c} value={c}>{c}</Option>)}
+                            </Select>
+                        </div>
+                    );
+                })}
+            </Modal>
         </div>
     );
 };

@@ -11,7 +11,8 @@ const DataNode: React.FC<NodeProps> = ({ data, id, selected }) => {
 
   const fetchFiles = () => {
     listFiles().then(res => {
-        const fileList = res.files || [];
+        // /data/list 返回 {filename, role, parent} 对象数组，这里只需文件名
+        const fileList = (res.files || []).map((f: any) => (typeof f === 'string' ? f : f.filename));
         setFiles(fileList);
     }).catch(err => {
         console.error("Failed to list files in DataNode:", err);

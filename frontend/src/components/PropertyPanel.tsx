@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Empty, Spin } from 'antd';
+import { Card, Empty, Spin, Tooltip, Button } from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
 import type { Node } from 'reactflow';
 import api from '../services/api';
 import MissingValueForm from './params/MissingValueForm';
@@ -16,9 +17,10 @@ interface PropertyPanelProps {
     inputNode: Node | null;
     rootNode?: Node | null;
     onNodeDataChange: (id: string, data: any) => void;
+    onDuplicate?: (id: string) => void;
 }
 
-const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, inputNode, rootNode, onNodeDataChange }) => {
+const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, inputNode, rootNode, onNodeDataChange, onDuplicate }) => {
     const [columns, setColumns] = useState<ColumnInfo[]>([]);
     const [labelColumn, setLabelColumn] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -92,10 +94,10 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, inputNode, 
         if (cat === 'preprocessing') {
             if (loading) return <Spin tip="正在加载列信息..." />;
             
-            if (label === '缺失值处理') {
+            if (label === '缺失值处理' || label === '中位数填充' || label === '众数填充' || label === '删除缺失行') {
                 return <MissingValueForm data={selectedNode.data} onChange={handleParamsChange} columns={columns} labelColumn={labelColumn} />;
             }
-            if (label === '标准化') {
+            if (label === '标准化' || label === '归一化') {
                 return <StandardizationForm data={selectedNode.data} onChange={handleParamsChange} columns={columns} labelColumn={labelColumn} />;
             }
             // Add other preprocessing types here if needed
@@ -110,10 +112,15 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, inputNode, 
 
     return (
         <Card 
-            title={`${selectedNode.data.label || '节点'} 参数配置`}
+            title={<Tooltip title={`${selectedNode.data.label || '节点'} 参数配置`}><span style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{selectedNode.data.label || '节点'} 参数配置</span></Tooltip>}
             bordered={false} 
             style={{ height: '100%', overflowY: 'auto' }}
             headStyle={{ borderBottom: '1px solid #f0f0f0' }}
+            extra={onDuplicate ? (
+                <Tooltip title="复制节点 (Ctrl+D)">
+                    <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => onDuplicate(selectedNode.id)} />
+                </Tooltip>
+            ) : undefined}
         >
             {renderContent()}
         </Card>

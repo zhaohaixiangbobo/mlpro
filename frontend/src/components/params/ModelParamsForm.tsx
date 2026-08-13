@@ -52,7 +52,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             try {
                 const res = await api.get('/data/list');
                 if (res.data && res.data.files) {
-                    setFileList(res.data.files);
+                    // /data/list 现返回对象数组，提取文件名
+                    setFileList(res.data.files.map((f: any) => (typeof f === 'string' ? f : f.filename)));
                 }
             } catch (error) {
                 console.error("Failed to fetch file list", error);
@@ -466,6 +467,15 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                     重置默认
                 </Button>
             </div>
+
+            <Form.Item
+                name="auto_tune"
+                valuePropName="checked"
+                tooltip="开启后使用内置参数网格 (GridSearchCV) 自动搜索最优参数，耗时较长，且会忽略手动设置的部分参数"
+                style={{ marginBottom: 16 }}
+            >
+                <Switch checkedChildren="自动调参" unCheckedChildren="手动参数" />
+            </Form.Item>
 
             {renderFields()}
             

@@ -42,9 +42,11 @@ const AlgoNode: React.FC<NodeProps> = ({ data, id, selected }) => {
         size="small" 
         title={
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Space>
+                <Space size={4} style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ color: borderColor }}>{icon}</span>
-                    <span>{data.label}</span>
+                    <Tooltip title={data.label}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{data.label}</span>
+                    </Tooltip>
                 </Space>
                 {data.onDelete && (
                     <Button 

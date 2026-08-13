@@ -5,6 +5,17 @@ import numpy as np
 from typing import Dict, List, Optional
 from sklearn.model_selection import train_test_split
 
+def detect_encoding(file_path: str) -> str:
+    """自动检测文件编码：优先 UTF-8，其次 GBK/GB18030，最后 Latin-1。"""
+    for enc in ("utf-8", "gb18030", "gbk", "latin-1"):
+        try:
+            with open(file_path, "r", encoding=enc) as f:
+                f.read(20000)
+            return enc
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    return "utf-8"
+
 class DataService:
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
@@ -24,18 +35,30 @@ class DataService:
         with open(meta_path, 'w', encoding='utf-8') as f:
             json.dump(meta, f, indent=2, ensure_ascii=False)
 
-    def load_data(self, filename: str) -> pd.DataFrame:
+    def load_data(self, filename: str, encoding: str = None, delimiter: str = None) -> pd.DataFrame:
         file_path = os.path.join(self.data_dir, filename)
+        meta = self._load_meta(filename)
+        enc = encoding or meta.get("encoding")
+        sep = delimiter or meta.get("delimiter")
         if filename.endswith(".csv"):
-            return pd.read_csv(file_path)
+            kwargs = {}
+            if enc:
+                kwargs["encoding"] = enc
+            if sep:
+                kwargs["sep"] = sep
+            return pd.read_csv(file_path, **kwargs)
         elif filename.endswith((".xlsx", ".xls")):
             return pd.read_excel(file_path)
         else:
             raise ValueError("Unsupported file format")
 
-    def analyze_data(self, filename: str) -> Dict:
-        df = self.load_data(filename)
+    def analyze_data(self, filename: str, encoding: str = None, delimiter: str = None) -> Dict:
+        df = self.load_data(filename, encoding, delimiter)
         meta = self._load_meta(filename)
+        if encoding:
+            meta["encoding"] = encoding
+        if delimiter:
+            meta["delimiter"] = delimiter
         
         column_stats = {}
         rows = len(df)
@@ -110,6 +133,45 @@ class DataService:
         meta["label_column"] = label_column
         self._save_meta(filename, meta)
         return meta
+
+    def delete_rows(self, filename: str, indices: List[int]) -> Dict:
+        """删除指定行并重新保存文件，返回更新后的 meta。"""
+        if not indices:
+            raise ValueError("No rows selected")
+        df = self.load_data(filename)
+        valid = sorted(set(int(i) for i in indices))
+        invalid = [i for i in valid if i < 0 or i >= len(df)]
+        if invalid:
+            raise ValueError(f"Row index out of range: {invalid}")
+        df = df.drop(index=valid).reset_index(drop=True)
+        if df.empty:
+            raise ValueError("Cannot delete all rows")
+        file_path = os.path.join(self.data_dir, filename)
+        ext = os.path.splitext(filename)[1]
+        meta = self._load_meta(filename)
+        enc = meta.get("encoding") or "utf-8"
+        if ext == ".csv":
+            df.to_csv(file_path, index=False, encoding=enc)
+        else:
+            df.to_excel(file_path, index=False)
+        return self.analyze_data(filename)
+
+    def create_demo_data(self, name: str) -> Dict:
+        """从 sklearn 内置数据集创建示例数据文件，返回 meta。"""
+        from sklearn.datasets import load_iris, load_wine, load_diabetes
+
+        loaders = {
+            "iris": load_iris,
+            "wine": load_wine,
+            "diabetes": load_diabetes,
+        }
+        if name not in loaders:
+            raise ValueError(f"Unknown demo dataset: {name}")
+        frame = loaders[name](as_frame=True).frame
+        fname = f"demo_{name}.csv"
+        fpath = os.path.join(self.data_dir, fname)
+        frame.to_csv(fpath, index=False, encoding="utf-8")
+        return self.analyze_data(fname, encoding="utf-8")
 
     def split_data(self, filename: str, train_ratio: float, test_ratio: float, val_ratio: float, 
                    strategy: str = "random", stratify_col: str = None):
