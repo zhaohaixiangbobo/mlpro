@@ -1,11 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import shutil
 import os
+import json
 import pandas as pd
-from typing import List, Optional
-from app.services.data_service import DataService
+from typing import List, Optional, Dict, Any
+from app.services.data_service import DataService, detect_encoding
 from app.services.ml_service import MLService
 from app.api import deps
 
@@ -40,24 +41,57 @@ class PCARequest(BaseModel):
     filename: str
     label_column: Optional[str] = None
 
+class ClusterVisualRequest(BaseModel):
+    filename: str
+    algorithm: str
+    params: dict = {}
+    preprocessing: List[Dict[str, Any]] = []
+
+class ElbowRequest(BaseModel):
+    filename: str
+    params: dict = {}
+    preprocessing: List[Dict[str, Any]] = []
+
+class DeleteRowsRequest(BaseModel):
+    filename: str
+    indices: List[int]
+
+class DemoDataRequest(BaseModel):
+    name: str
+
 @router.post("/upload")
 async def upload_file(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
+    encoding: str = Form("auto"),
+    delimiter: str = Form(""),
     upload_dir: str = Depends(get_upload_dir),
     data_service: DataService = Depends(get_data_service)
 ):
-    file_location = os.path.join(upload_dir, file.filename)
+    filename = os.path.basename(file.filename or "")
+    if not filename or not filename.lower().endswith((".csv", ".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="仅支持 CSV / Excel 文件")
+    file_location = os.path.join(upload_dir, filename)
     try:
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
+        # Resolve encoding & delimiter, then store in meta
+        if filename.lower().endswith(".csv"):
+            if encoding == "auto" or not encoding:
+                encoding = detect_encoding(file_location)
+            if delimiter == "\\t" or delimiter == "tab":
+                delimiter = "\t"
+            data_service._save_meta(filename, {"encoding": encoding, "delimiter": delimiter or None})
+        else:
+            data_service._save_meta(filename, {"encoding": None, "delimiter": None})
+
         # Initial analysis to create meta
-        data_service.analyze_data(file.filename)
+        data_service.analyze_data(filename)
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not upload file: {str(e)}")
     
-    return {"filename": file.filename, "message": "File uploaded successfully"}
+    return {"filename": filename, "encoding": encoding, "message": "File uploaded successfully"}
 
 @router.get("/preview/{filename}")
 async def preview_data(
@@ -72,13 +106,8 @@ async def preview_data(
         raise HTTPException(status_code=404, detail="File not found")
     
     try:
-        # Load basic preview from file
-        if filename.endswith(".csv"):
-            df = pd.read_csv(file_path)
-        elif filename.endswith(".xlsx") or filename.endswith(".xls"):
-            df = pd.read_excel(file_path)
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
+        # Load via DataService so encoding/delimiter from meta is respected
+        df = data_service.load_data(filename)
         
         total = len(df)
         start = (page - 1) * limit
@@ -126,7 +155,22 @@ async def list_files(upload_dir: str = Depends(get_upload_dir)):
         
         full_path = os.path.join(upload_dir, f)
         if os.path.isfile(full_path):
-            data_files.append(f)
+            role = "source"
+            parent = None
+            # 从 meta 读取角色信息（划分文件/自动测试集等）
+            meta_path = os.path.join(upload_dir, f"{f}.meta.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r', encoding='utf-8') as mf:
+                        meta = json.load(mf)
+                        role = meta.get("role", "source")
+                        parent = meta.get("parent")
+                except Exception:
+                    pass
+            # 预测结果文件（早期版本未写 role）
+            if role == "source" and f.startswith("pred_"):
+                role = "prediction"
+            data_files.append({"filename": f, "role": role, "parent": parent})
             
     return {"files": data_files}
 
@@ -192,6 +236,28 @@ async def delete_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/rows/delete")
+async def delete_rows(
+    req: DeleteRowsRequest,
+    data_service: DataService = Depends(get_data_service)
+):
+    try:
+        meta = data_service.delete_rows(req.filename, req.indices)
+        return {"message": "Rows deleted", "meta": meta, "deleted": len(req.indices)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/demo")
+async def create_demo(
+    req: DemoDataRequest,
+    data_service: DataService = Depends(get_data_service)
+):
+    try:
+        meta = data_service.create_demo_data(req.name)
+        return {"filename": meta.get("filename"), "meta": meta, "message": "示例数据已生成"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/pca")
 async def get_pca(
     req: PCARequest,
@@ -199,6 +265,32 @@ async def get_pca(
 ):
     try:
         data = ml_service.get_pca_data(req.filename, req.label_column)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/cluster/visualize")
+async def cluster_visualize(
+    req: ClusterVisualRequest,
+    ml_service: MLService = Depends(get_ml_service)
+):
+    """聚类结果散点图：运行聚类并按簇着色投影到 PCA 二维平面"""
+    try:
+        data = ml_service.get_cluster_visualization(
+            req.filename, req.algorithm, req.params, req.preprocessing
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/cluster/elbow")
+async def kmeans_elbow(
+    req: ElbowRequest,
+    ml_service: MLService = Depends(get_ml_service)
+):
+    """K-Means 肘部法则：不同 K 的 SSE / 轮廓系数，辅助选择簇数量"""
+    try:
+        data = ml_service.kmeans_elbow(req.filename, req.params, req.preprocessing)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

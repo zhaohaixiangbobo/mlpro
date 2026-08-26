@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { Layout, Menu, Button, Avatar, Dropdown, Modal } from 'antd';
-import { 
-  UploadOutlined, 
-  NodeIndexOutlined, 
+import {
+  UploadOutlined,
+  NodeIndexOutlined,
   DashboardOutlined,
   UserOutlined,
   LogoutOutlined,
   QuestionCircleOutlined,
   RobotOutlined,
-  ReadOutlined
+  ReadOutlined,
+  FundOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -79,6 +80,12 @@ const MainLayout: React.FC = () => {
               icon: <DashboardOutlined />,
               label: '可视化结果',
               onClick: () => navigate('/dashboard'),
+            },
+            {
+              key: '/compare',
+              icon: <FundOutlined />,
+              label: '模型对比',
+              onClick: () => navigate('/compare'),
             },
             {
               key: '/algorithms',

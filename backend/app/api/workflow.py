@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 import time
+from datetime import datetime
 from app.services.ml_service import MLService
 from app.api import deps
 
@@ -17,18 +19,43 @@ def get_ml_service(user_dir: str = Depends(deps.get_current_user_dir)) -> MLServ
 def get_workflow_dir(user_dir: str = Depends(deps.get_current_user_dir)) -> str:
     return os.path.join(user_dir, "workflows")
 
+def get_user_dir(user_dir: str = Depends(deps.get_current_user_dir)) -> str:
+    return user_dir
+
+def _load_history(user_dir: str) -> List[Dict]:
+    path = os.path.join(user_dir, "history.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def _append_history(user_dir: str, entry: Dict):
+    history = _load_history(user_dir)
+    history.insert(0, entry)
+    history = history[:200]
+    path = os.path.join(user_dir, "history.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
 class RunRequest(BaseModel):
     data_file: str
     algorithm: str
     params: dict = {}
     preprocessing: List[Dict[str, Any]] = []
     node_id: str = None
+    chain: List[Dict[str, Any]] = []
+    auto_tune: bool = False
 
 class PredictRequest(BaseModel):
     node_id: str
     data_file: str
     preprocessing: List[Dict[str, Any]] = []
     algorithm_label: str = None
+    chain: List[Dict[str, Any]] = []
+    column_map: Optional[Dict[str, str]] = None
 
 class WorkflowSaveRequest(BaseModel):
     name: str
@@ -38,6 +65,7 @@ class WorkflowSaveRequest(BaseModel):
 @router.post("/run")
 async def run_workflow(
     request: RunRequest,
+    user_dir: str = Depends(get_user_dir),
     ml_service: MLService = Depends(get_ml_service)
 ):
     try:
@@ -46,15 +74,74 @@ async def run_workflow(
             request.algorithm, 
             request.params,
             request.preprocessing,
-            request.node_id
+            request.node_id,
+            request.chain
         )
+        # Record run history
+        metric = {}
+        if isinstance(result, dict):
+            for k in ("accuracy", "r2_score", "silhouette_score", "mse"):
+                if k in result:
+                    metric[k] = round(float(result[k]), 6)
+        _append_history(user_dir, {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data_file": request.data_file,
+            "algorithm": request.algorithm,
+            "node_id": request.node_id,
+            "chain": [c.get("node_id") for c in request.chain if c.get("node_id")],
+            "auto_tune": bool(request.params.get("auto_tune")),
+            "metrics": metric,
+            "status": "success"
+        })
         return {"status": "success", "result": result}
     except Exception as e:
         import traceback
         traceback.print_exc()
+        _append_history(user_dir, {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data_file": request.data_file,
+            "algorithm": request.algorithm,
+            "node_id": request.node_id,
+            "chain": [c.get("node_id") for c in request.chain if c.get("node_id")],
+            "auto_tune": bool(request.params.get("auto_tune")),
+            "metrics": {},
+            "status": "failed",
+            "error": str(e)[:300]
+        })
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi.responses import FileResponse
+@router.get("/history")
+async def get_history(user_dir: str = Depends(get_user_dir)):
+    return {"history": _load_history(user_dir)}
+
+@router.get("/model/features/{node_id}")
+async def model_features(
+    node_id: str,
+    ml_service: MLService = Depends(get_ml_service)
+):
+    try:
+        features = ml_service.get_model_features(node_id)
+        return {"node_id": node_id, "features": features}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/model/download/{node_id}")
+async def download_model(
+    node_id: str,
+    ml_service: MLService = Depends(get_ml_service)
+):
+    try:
+        models_dir = os.path.join(ml_service.data_dir, "models")
+        model_path = os.path.join(models_dir, f"{node_id}.joblib")
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail="Model not found")
+        return FileResponse(
+            path=model_path,
+            filename=f"model_{node_id}.joblib",
+            media_type="application/octet-stream"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/predict")
 async def predict(
@@ -62,7 +149,10 @@ async def predict(
     ml_service: MLService = Depends(get_ml_service)
 ):
     try:
-        result = ml_service.predict(req.node_id, req.data_file, req.preprocessing, req.algorithm_label)
+        result = ml_service.predict(
+            req.node_id, req.data_file, req.preprocessing,
+            req.algorithm_label, req.chain, req.column_map
+        )
         return {"status": "success", "result": result}
     except Exception as e:
         import traceback

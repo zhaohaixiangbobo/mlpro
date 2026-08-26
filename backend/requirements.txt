@@ -3,6 +3,16 @@ uvicorn
 pandas
 python-multipart
 scikit-learn
+xgboost
+lightgbm
 openpyxl
 pydantic
 numpy
+SQLAlchemy
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+joblib
+matplotlib
+python-docx
+reportlab

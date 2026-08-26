@@ -2,7 +2,8 @@ import pandas as pd
 import os
 import json
 import joblib
-from sklearn.model_selection import train_test_split
+from joblib import parallel_backend
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, learning_curve
 from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingRegressor
@@ -25,6 +26,18 @@ try:
     from lightgbm import LGBMClassifier
 except ImportError:
     LGBMClassifier = None
+
+# 自动调参的预置参数网格（小网格，保证速度）
+AUTO_TUNE_GRIDS = {
+    "逻辑回归": {"C": [0.1, 1.0, 10.0]},
+    "决策树": {"max_depth": [3, 5, None]},
+    "随机森林": {"n_estimators": [50, 100], "max_depth": [None, 5]},
+    "支持向量机 SVM": {"C": [0.1, 1.0, 10.0], "kernel": ["rbf", "linear"]},
+    "岭回归": {"alpha": [0.1, 1.0, 10.0]},
+    "Lasso": {"alpha": [0.1, 1.0, 10.0]},
+    "随机森林回归": {"n_estimators": [50, 100]},
+    "GBDT回归": {"n_estimators": [50, 100], "learning_rate": [0.05, 0.1]},
+}
 
 class MLService:
     def __init__(self, data_dir: str = "data"):
@@ -113,20 +126,43 @@ class MLService:
         
         return df
 
-    def _evaluate_model(self, model, X_test, y_test, task_type):
+    def _evaluate_model(self, model, X_test, y_test, task_type, label_map: dict = None):
         """
         Evaluate model based on task type
+        label_map: {encoded_label: original_label_str} for classification display
         """
         if task_type == "classification":
             y_pred = model.predict(X_test)
             acc = accuracy_score(y_test, y_pred)
             cm = confusion_matrix(y_test, y_pred).tolist()
-            return {
+            result = {
                 "type": "classification",
                 "accuracy": acc,
                 "confusion_matrix": cm,
                 "report": classification_report(y_test, y_pred, output_dict=True)
             }
+            # Probability output (sampled rows)
+            proba_sample = []
+            if hasattr(model, "predict_proba"):
+                try:
+                    proba = model.predict_proba(X_test)
+                    classes = list(getattr(model, "classes_", []))
+                    n = min(10, len(proba))
+                    idxs = np.linspace(0, len(proba) - 1, n).astype(int)
+                    for i in idxs:
+                        yt = y_test.iloc[i] if hasattr(y_test, "iloc") else y_test[i]
+                        def disp(v):
+                            if label_map:
+                                return label_map.get(int(v), str(v))
+                            return str(v)
+                        row = {"actual": disp(yt), "predicted": disp(y_pred[i])}
+                        for j, c in enumerate(classes):
+                            row[f"p({disp(c)})"] = round(float(proba[i][j]), 4)
+                        proba_sample.append(row)
+                except Exception:
+                    proba_sample = []
+            result["probabilities"] = proba_sample
+            return result
         
         elif task_type == "regression":
             y_pred = model.predict(X_test)
@@ -134,13 +170,26 @@ class MLService:
             rmse = np.sqrt(mse)
             mae = mean_absolute_error(y_test, y_pred)
             r2 = r2_score(y_test, y_pred)
+            # Residual sample for plots (max 300 points)
+            residuals = []
+            try:
+                n = min(300, len(y_test))
+                idxs = np.linspace(0, len(y_test) - 1, n).astype(int)
+                for i in idxs:
+                    yt = y_test.iloc[i] if hasattr(y_test, "iloc") else y_test[i]
+                    actual = float(yt)
+                    pred = float(y_pred[i])
+                    residuals.append({"actual": actual, "predicted": pred, "residual": round(pred - actual, 6)})
+            except Exception:
+                residuals = []
             return {
                 "type": "regression",
                 "mse": mse,
                 "rmse": rmse,
                 "mae": mae,
                 "r2_score": r2,
-                "prediction_head": y_pred[:10].tolist()
+                "prediction_head": y_pred[:10].tolist(),
+                "residuals": residuals
             }
         
         elif task_type == "clustering":
@@ -177,13 +226,22 @@ class MLService:
             
         return {}
 
-    def save_model(self, model, node_id: str):
-        """Save the trained model to disk."""
+    def save_model(self, model, node_id: str, le=None):
+        """Save the trained model to disk. 分类模型同时保存 LabelEncoder 以便预测时还原原始标签"""
         models_dir = os.path.join(self.data_dir, "models")
         os.makedirs(models_dir, exist_ok=True)
         model_path = os.path.join(models_dir, f"{node_id}.joblib")
         joblib.dump(model, model_path)
+        if le is not None:
+            joblib.dump(le, os.path.join(models_dir, f"{node_id}_le.joblib"))
         return model_path
+
+    def load_label_encoder(self, node_id: str):
+        """Load the saved LabelEncoder for a node, or None if not available."""
+        le_path = os.path.join(self.data_dir, "models", f"{node_id}_le.joblib")
+        if os.path.exists(le_path):
+            return joblib.load(le_path)
+        return None
 
     def load_model(self, node_id: str):
         """Load a trained model from disk."""
@@ -193,17 +251,28 @@ class MLService:
             raise FileNotFoundError(f"Model for node {node_id} not found.")
         return joblib.load(model_path)
 
-    def predict(self, node_id: str, data_file: str, preprocessing: list = None, algorithm_label: str = None):
+    def predict(self, node_id: str, data_file: str, preprocessing: list = None, algorithm_label: str = None, chain: list = None, column_map: dict = None):
         """
         Run prediction using a saved model.
+        chain: 上游模型节点列表（链式模型预测）
+        column_map: {model_feature: file_column} 列名映射
         """
         try:
             # 1. Load Data
             df = self.load_data(data_file)
-            
+
+            # 1.5 Apply column mapping (rename file columns to model features)
+            if column_map:
+                rename_map = {file_col: model_feat for model_feat, file_col in column_map.items() if file_col and file_col in df.columns}
+                df = df.rename(columns=rename_map)
+
             # 2. Preprocessing
             if preprocessing:
                 df = self.preprocess_data(df, preprocessing)
+
+            # 2.5 Chain features
+            if chain:
+                df = self._apply_chain_features(df, chain, None)
             
             df_numeric = df.select_dtypes(include=[np.number])
             if df_numeric.empty:
@@ -213,6 +282,9 @@ class MLService:
             model = self.load_model(node_id)
             
             # 4. Predict
+            # DBSCAN 等模型没有 predict 方法，只支持聚类分析
+            if not hasattr(model, "predict"):
+                raise ValueError("该模型不支持预测（DBSCAN 仅支持聚类分析，请使用 K-Means 等可预测的聚类算法）")
             # Align columns if possible or assume correct input
             # Ideally we should save feature names with the model to verify.
             # For now, we assume user uploads correct format.
@@ -221,12 +293,19 @@ class MLService:
                  common_cols = [c for c in model.feature_names_in_ if c in df_numeric.columns]
                  if len(common_cols) < len(model.feature_names_in_):
                      missing = set(model.feature_names_in_) - set(common_cols)
-                     raise ValueError(f"Missing features for prediction: {missing}")
+                     raise ValueError(f"预测数据缺少模型特征: {sorted(missing)}。请检查列名，或在预测页面使用列映射功能。")
                  X = df_numeric[model.feature_names_in_]
             else:
                  X = df_numeric
             
             predictions = model.predict(X)
+            # 分类模型：用训练时保存的 LabelEncoder 把编码还原为原始标签值
+            try:
+                saved_le = self.load_label_encoder(node_id)
+                if saved_le is not None:
+                    predictions = saved_le.inverse_transform(predictions)
+            except Exception:
+                pass
             
             # 5. Save Results
             # Create a dataframe with predictions
@@ -276,6 +355,18 @@ class MLService:
                 result_df.to_csv(pred_path, index=False)
             else:
                 result_df.to_excel(pred_path, index=False)
+
+            # 写入 meta：标注为预测结果并记录来源文件（便于数据管理分组/清理）
+            try:
+                pred_meta = self._load_meta(data_file)
+                pred_meta["filename"] = pred_filename
+                pred_meta["role"] = "prediction"
+                pred_meta["parent"] = data_file
+                pred_meta["rows"] = len(result_df)
+                with open(os.path.join(self.data_dir, f"{pred_filename}.meta.json"), "w", encoding="utf-8") as f:
+                    json.dump(pred_meta, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
                 
             return {
                 "filename": pred_filename,
@@ -284,6 +375,12 @@ class MLService:
             
         except Exception as e:
             raise RuntimeError(f"Prediction failed: {str(e)}")
+
+    def get_model_features(self, node_id: str):
+        """Return the feature names a trained model expects, if available."""
+        model = self.load_model(node_id)
+        return list(getattr(model, "feature_names_in_", []))
+
     def get_pca_data(self, filename: str, label_col: str = None):
         """
         Perform PCA dimensionality reduction for visualization.
@@ -356,7 +453,201 @@ class MLService:
             print(f"PCA Error: {str(e)}")
             return []
 
-    def run_algorithm(self, data_file: str, algorithm: str, params: dict, preprocessing: list = None, node_id: str = None):
+    def _fit_clustering(self, data_file: str, algorithm: str, params: dict, preprocessing: list = None):
+        """
+        Shared helper: load data, apply preprocessing, fit a clustering model.
+        Returns (model, X_numeric_cleaned, label_col)
+        """
+        df = self.load_data(data_file)
+        meta = self._load_meta(data_file)
+        label_col = meta.get("label_column")
+
+        if preprocessing:
+            df = self.preprocess_data(df, preprocessing, label_col)
+
+        df_numeric = df.select_dtypes(include=[np.number])
+        if label_col and label_col in df_numeric.columns:
+            df_numeric = df_numeric.drop(columns=[label_col])
+        if df_numeric.empty:
+            raise ValueError("No numeric data found for clustering")
+        df_numeric = df_numeric.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(df_numeric) < 2:
+            raise ValueError("Not enough samples for clustering (need >= 2)")
+
+        model_params = dict(params)
+        model_params.pop("test_file", None)
+        model_params.pop("random_state", None)
+        random_state = params.get("random_state", 42)
+
+        if algorithm == "K-Means":
+            model = KMeans(**model_params, random_state=random_state)
+        elif algorithm == "DBSCAN":
+            model = DBSCAN(**model_params)
+        else:
+            raise ValueError(f"Unknown clustering algorithm: {algorithm}")
+        model.fit(df_numeric)
+        return model, df_numeric
+
+    def get_cluster_visualization(self, data_file: str, algorithm: str, params: dict, preprocessing: list = None):
+        """
+        Run clustering and return PCA-projected points colored by cluster label.
+        Returns: {"points": [{"x","y","cluster"}], "centers": [{"x","y","cluster"}],
+                  "n_clusters": n, "n_noise": n}
+        """
+        try:
+            model, X = self._fit_clustering(data_file, algorithm, params, preprocessing)
+            labels = model.labels_ if hasattr(model, "labels_") else model.predict(X)
+            labels = np.asarray(labels)
+
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            pca = PCA(n_components=2)
+            coords = pca.fit_transform(X_scaled)
+
+            points = [
+                {"x": float(c[0]), "y": float(c[1]), "cluster": int(labels[i])}
+                for i, c in enumerate(coords)
+            ]
+            centers = []
+            if hasattr(model, "cluster_centers_"):
+                centers_pc = pca.transform(scaler.transform(model.cluster_centers_))
+                centers = [
+                    {"x": float(c[0]), "y": float(c[1]), "cluster": int(i)}
+                    for i, c in enumerate(centers_pc)
+                ]
+            n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+            return {
+                "points": points,
+                "centers": centers,
+                "n_clusters": int(n_clusters),
+                "n_noise": int(list(labels).count(-1)),
+                "algorithm": algorithm,
+            }
+        except Exception as e:
+            raise RuntimeError(f"Cluster visualization failed: {str(e)}")
+
+    def kmeans_elbow(self, data_file: str, params: dict, preprocessing: list = None, k_max: int = 10):
+        """
+        K-Means elbow method: inertia & silhouette for k = 1..k_max.
+        Returns: {"ks": [...], "inertia": [...], "silhouette": [...], "recommended_k": int|None}
+        """
+        try:
+            model_params = {k: v for k, v in params.items()
+                            if k not in ("n_clusters", "test_file", "random_state")}
+            random_state = params.get("random_state", 42)
+
+            df = self.load_data(data_file)
+            meta = self._load_meta(data_file)
+            label_col = meta.get("label_column")
+            if preprocessing:
+                df = self.preprocess_data(df, preprocessing, label_col)
+            df_numeric = df.select_dtypes(include=[np.number])
+            if label_col and label_col in df_numeric.columns:
+                df_numeric = df_numeric.drop(columns=[label_col])
+            df_numeric = df_numeric.replace([np.inf, -np.inf], np.nan).dropna()
+            if len(df_numeric) < 2:
+                raise ValueError("Not enough samples for elbow analysis")
+
+            ks, inertia, silhouette = [], [], []
+            for k in range(1, int(k_max) + 1):
+                km = KMeans(n_clusters=k, **model_params, random_state=random_state)
+                km.fit(df_numeric)
+                ks.append(k)
+                inertia.append(float(km.inertia_))
+                if k >= 2 and len(set(km.labels_)) > 1:
+                    try:
+                        sil = float(silhouette_score(df_numeric, km.labels_))
+                    except Exception:
+                        sil = -1.0
+                    silhouette.append(round(sil, 4))
+                else:
+                    silhouette.append(None)
+
+            recommended_k = None
+            valid = [(k, s) for k, s in zip(ks, silhouette) if s is not None]
+            if valid:
+                recommended_k = max(valid, key=lambda x: x[1])[0]
+            return {
+                "ks": ks,
+                "inertia": [round(v, 4) for v in inertia],
+                "silhouette": silhouette,
+                "recommended_k": recommended_k,
+            }
+        except Exception as e:
+            raise RuntimeError(f"K-Means elbow analysis failed: {str(e)}")
+
+    def _apply_chain_features(self, df: pd.DataFrame, chain: list, label_col: str = None) -> pd.DataFrame:
+        """
+        Apply chain model predictions as extra features (支持多数据源/多上游模型 stacking).
+        chain: list of [{"node_id": str, "preprocessing": list, "algorithm_label": str,
+                         "data_file": str (optional, 独立数据源)}]
+        """
+        for c in chain:
+            node_id = c.get("node_id")
+            if not node_id:
+                continue
+            c_pre = c.get("preprocessing") or []
+            c_file = c.get("data_file")
+            if c_file:
+                # 独立数据源：链式模型在自己的数据源上预测
+                c_df = self.load_data(c_file)
+                c_label = label_col
+                if c_label and c_label not in c_df.columns:
+                    c_label = None
+                if c_pre:
+                    c_df = self.preprocess_data(c_df, c_pre, c_label)
+            else:
+                c_df = df.copy()
+                if c_pre:
+                    c_df = self.preprocess_data(c_df, c_pre, label_col)
+            c_numeric = c_df.select_dtypes(include=[np.number])
+            if label_col and label_col in c_numeric.columns:
+                c_numeric = c_numeric.drop(columns=[label_col])
+            if c_numeric.empty:
+                raise ValueError(f"链式模型 {node_id} 无可用的数值特征")
+            c_model = self.load_model(node_id)
+            if hasattr(c_model, "feature_names_in_"):
+                common = [f for f in c_model.feature_names_in_ if f in c_numeric.columns]
+                missing = set(c_model.feature_names_in_) - set(common)
+                if missing:
+                    raise ValueError(f"链式模型 {node_id} 缺少特征: {sorted(missing)}")
+                c_X = c_numeric[c_model.feature_names_in_]
+            else:
+                c_X = c_numeric
+            chain_pred = c_model.predict(c_X)
+            if len(chain_pred) != len(df):
+                raise ValueError(
+                    f"链式模型 {node_id} 预测行数 ({len(chain_pred)}) 与主数据行数 ({len(df)}) 不一致，"
+                    f"请检查各分支数据是否对齐（如缺失值处理方式一致）"
+                )
+            df[f"chain_pred_{node_id}"] = chain_pred
+        return df
+
+    def export_holdout_test(self, df_test: pd.DataFrame, data_file: str) -> str:
+        """
+        将训练时自动划分出的留出测试集导出为文件（含 meta），
+        供模型预测页直接选用，无需手动划分/上传。
+        返回导出的文件名。
+        """
+        base = os.path.splitext(data_file)[0]
+        ext = os.path.splitext(data_file)[1] or ".csv"
+        fname = f"{base}_auto_test{ext}"
+        fpath = os.path.join(self.data_dir, fname)
+        if ext.lower() == ".csv":
+            df_test.to_csv(fpath, index=False)
+        else:
+            df_test.to_excel(fpath, index=False)
+
+        meta = self._load_meta(data_file)
+        meta["filename"] = fname
+        meta["role"] = "auto_test"
+        meta["parent"] = data_file
+        meta["rows"] = len(df_test)
+        with open(os.path.join(self.data_dir, f"{fname}.meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        return fname
+
+    def run_algorithm(self, data_file: str, algorithm: str, params: dict, preprocessing: list = None, node_id: str = None, chain: list = None):
         try:
             df = self.load_data(data_file)
             meta = self._load_meta(data_file)
@@ -365,6 +656,10 @@ class MLService:
             # 1. Preprocessing
             if preprocessing:
                 df = self.preprocess_data(df, preprocessing, label_col)
+
+            # 1.5 Chain: 上游模型的预测结果作为额外特征（模型链式建模）
+            if chain:
+                df = self._apply_chain_features(df, chain, label_col)
             
             df_numeric = df.select_dtypes(include=[np.number])
             if df_numeric.empty:
@@ -383,6 +678,8 @@ class MLService:
             X_test = None
             y_test = None
             task_type = None
+            auto_test_file = None  # 默认划分策略下导出的留出测试集文件名
+            skipped_test = 0  # 因类别不在训练集中而被剔除的测试样本数
 
             if algorithm in classification_algos or algorithm in regression_algos:
                 # Supervised Learning
@@ -397,6 +694,7 @@ class MLService:
                 model_params = params.copy()
                 model_params.pop("test_file", None)
                 model_params.pop("random_state", None)
+                model_params.pop("auto_tune", None)
 
                 # Prepare Train Data
                 if label_col not in df.columns:
@@ -460,8 +758,33 @@ class MLService:
                     # X_test, y_test are already set
                     
                 else:
-                    # Default Split Strategy
-                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=random_state)
+                    # Default Split Strategy: 自动划分 80/20，并把留出测试集导出为文件，
+                    # 模型预测页可直接选用（无需手动划分/上传）
+                    df_train, df_test = train_test_split(df, test_size=0.2, random_state=random_state)
+                    auto_test_file = None
+                    try:
+                        auto_test_file = self.export_holdout_test(df_test, data_file)
+                    except Exception:
+                        auto_test_file = None
+                    if le is not None:
+                        # 重新基于训练集 fit，保证编码类别连续（0..k-1），
+                        # 否则划分后缺失的类别会造成编码空洞，XGBoost/LightGBM 会报
+                        # "Invalid classes inferred from unique values of y"
+                        le = LabelEncoder()
+                        y_train = le.fit_transform(df_train[label_col])
+                        # 测试集可能包含训练集中未出现的低频类别，
+                        # 剔除这些样本以保证评估可用（结果中会记录数量）
+                        seen_classes = set(le.classes_)
+                        test_mask = df_test[label_col].isin(seen_classes)
+                        skipped_test = int((~test_mask).sum())
+                        if skipped_test:
+                            df_test = df_test[test_mask]
+                        y_test = le.transform(df_test[label_col])
+                    else:
+                        y_train = df_train[label_col]
+                        y_test = df_test[label_col]
+                    X_train = df_train.select_dtypes(include=[np.number]).drop(columns=[label_col], errors='ignore')
+                    X_test = df_test.select_dtypes(include=[np.number]).drop(columns=[label_col], errors='ignore')
                 
                 # Initialize Model
                 
@@ -473,13 +796,16 @@ class MLService:
                 elif algorithm == "随机森林":
                     model = RandomForestClassifier(**model_params, random_state=random_state)
                 elif algorithm == "支持向量机 SVM":
-                    model = SVC(**model_params, random_state=random_state)
+                    svc_params = dict(model_params)
+                    svc_params.setdefault("probability", True)  # 输出概率需要 probability=True
+                    model = SVC(**svc_params, random_state=random_state)
                 elif algorithm == "KNN":
                     model = KNeighborsClassifier(**model_params) # KNN has no random_state
                 elif algorithm == "XGBoost":
                     if XGBClassifier is None:
                         raise ValueError("XGBoost library is not installed.")
-                    model = XGBClassifier(**model_params, random_state=random_state, use_label_encoder=False, eval_metric='logloss')
+                    # 注意: xgboost >= 2.0 已移除 use_label_encoder 参数，不能再传入
+                    model = XGBClassifier(**model_params, random_state=random_state, eval_metric='logloss')
                 elif algorithm == "LightGBM":
                     if LGBMClassifier is None:
                         raise ValueError("LightGBM library is not installed.")
@@ -500,33 +826,95 @@ class MLService:
                 if model is None:
                      raise ValueError(f"Algorithm {algorithm} implementation pending")
 
-                model.fit(X_train, y_train)
+                # 自动调参（GridSearchCV）
+                tune_note = {}
+                if params.get("auto_tune") and algorithm in AUTO_TUNE_GRIDS:
+                    # 线程后端：Windows 下 joblib 多进程池无法回收会泄漏 numpy worker 进程，拖垮系统
+                    with parallel_backend("threading", n_jobs=2):
+                        grid_cv = GridSearchCV(model, AUTO_TUNE_GRIDS[algorithm], cv=3, n_jobs=2)
+                    grid_cv.fit(X_train, y_train)
+                    model = grid_cv.best_estimator_
+                    tune_note = {
+                        "best_params": grid_cv.best_params_,
+                        "cv_best_score": float(grid_cv.best_score_),
+                    }
+                else:
+                    model.fit(X_train, y_train)
                 
-                # Save Model if node_id provided
-                if node_id:
-                    self.save_model(model, node_id)
+                # ---------- 评估深度：交叉验证 ----------
+                cv_folds = 5 if len(X_train) >= 100 else 3
+                cv_scores, cv_mean, cv_std = [], None, None
+                try:
+                    with parallel_backend("threading", n_jobs=2):
+                        scores = cross_val_score(model, X_train, y_train, cv=cv_folds, n_jobs=2)
+                    cv_scores = [round(float(s), 4) for s in scores]
+                    cv_mean = float(np.mean(scores))
+                    cv_std = float(np.std(scores))
+                except Exception:
+                    cv_scores, cv_mean, cv_std = [], None, None
+
+                # ---------- 评估深度：学习曲线 ----------
+                learning_curve_data = None
+                try:
+                    with parallel_backend("threading", n_jobs=2):
+                        train_sizes, train_scores, test_scores = learning_curve(
+                            model, X_train, y_train, cv=cv_folds,
+                            train_sizes=[0.3, 0.5, 0.7, 1.0], n_jobs=2
+                        )
+                    learning_curve_data = {
+                        "train_sizes": [float(s) for s in train_sizes],
+                        "train_scores": [round(float(np.mean(ts)), 4) for ts in train_scores],
+                        "test_scores": [round(float(np.mean(ts)), 4) for ts in test_scores],
+                    }
+                except Exception:
+                    learning_curve_data = None
+
+                # ---------- 评估深度：特征重要性 ----------
+                feature_importance = None
+                try:
+                    imp_attr = getattr(model, "feature_importances_", None)
+                    if imp_attr is not None:
+                        feature_importance = sorted(
+                            [{"feature": str(f), "importance": round(float(v), 6)}
+                             for f, v in zip(X.columns, imp_attr)],
+                            key=lambda x: -x["importance"]
+                        )
+                    elif hasattr(model, "coef_"):
+                        coef = np.ravel(model.coef_)
+                        feature_importance = sorted(
+                            [{"feature": str(f), "importance": round(abs(float(v)), 6), "coef": round(float(v), 6)}
+                             for f, v in zip(X.columns, coef)],
+                            key=lambda x: -x["importance"]
+                        )
+                except Exception:
+                    feature_importance = None
                 
                 # Evaluate
                 task_type = "classification" if algorithm in classification_algos else "regression"
-                result = self._evaluate_model(model, X_test, y_test, task_type)
+                label_map = None
+                if task_type == "classification" and le is not None:
+                    label_map = {int(le.transform([c])[0]): str(c) for c in le.classes_}
+                # Save Model if node_id provided (分类模型附上 LabelEncoder 以便预测还原原始标签)
+                if node_id:
+                    self.save_model(model, node_id, le if task_type == "classification" else None)
+                result = self._evaluate_model(model, X_test, y_test, task_type, label_map)
+                result.update(tune_note)
+                if auto_test_file:
+                    result["auto_test_file"] = auto_test_file
+                if skipped_test:
+                    result["test_skipped"] = skipped_test
+                if cv_scores:
+                    result["cv_mean"] = cv_mean
+                    result["cv_std"] = cv_std
+                    result["cv_scores"] = cv_scores
+                if learning_curve_data:
+                    result["learning_curve"] = learning_curve_data
+                if feature_importance:
+                    result["feature_importance"] = feature_importance
     
             elif algorithm in clustering_algos:
                 # Unsupervised
-                random_state = params.get("random_state", 42)
-                model_params = params.copy()
-                model_params.pop("test_file", None)
-                model_params.pop("random_state", None)
-
-                # Use all numeric columns including label if it's numeric? Usually drop label for clustering if it exists.
-                X = df_numeric.drop(columns=[label_col], errors='ignore') if label_col else df_numeric
-                
-                model = None
-                if algorithm == "K-Means":
-                    model = KMeans(**model_params, random_state=random_state)
-                    model.fit(X)
-                elif algorithm == "DBSCAN":
-                    model = DBSCAN(**model_params)
-                    model.fit(X) # DBSCAN fits and predicts implicitly
+                model, X = self._fit_clustering(data_file, algorithm, params, preprocessing)
                 
                 # Save Model if node_id provided
                 if node_id:

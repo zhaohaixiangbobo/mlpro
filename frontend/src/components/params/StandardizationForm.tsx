@@ -60,12 +60,12 @@ const StandardizationForm: React.FC<StandardizationFormProps> = ({ data, onChang
     return (
         <div>
             <Title level={5}>数据标准化配置</Title>
-            <Alert message="标准化仅适用于数值型列" type="info" showIcon style={{ marginBottom: 16 }} />
+            <Alert message={data.label === '归一化' ? '归一化将数据缩放到 [0,1] 区间，仅适用于数值型列' : '标准化仅适用于数值型列'} type="info" showIcon style={{ marginBottom: 16 }} />
             
             <Form
                 form={form}
                 layout="vertical"
-                initialValues={data.params || { method: 'standard', columns: [] }}
+                initialValues={data.params || { method: data.label === '归一化' ? 'minmax' : 'standard', columns: [] }}
                 onValuesChange={handleValuesChange}
             >
                 <Form.Item name="method" label="标准化方法">
