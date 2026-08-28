@@ -326,7 +326,8 @@ const Workflow = () => {
         if (src.type === 'dataNode') {
           branchInfo.push({ data: src, pre: [...branchPre], crossedModel });
         } else if (src.type === 'algoNode' && src.data.category === 'Preprocessing') {
-          walk(src.id, [...branchPre, src], crossedModel, depth + 1);
+          // 回溯方向与执行方向相反，需前插以保证「数据→模型」的正确执行顺序（与旧版 unshift 语义一致）
+          walk(src.id, [src, ...branchPre], crossedModel, depth + 1);
         } else if (src.type === 'algoNode' && src.data.category === 'Model') {
           // 依赖拓扑顺序保证上游先运行，无需依赖 status
           if (!chainModels.some(m => m.id === src.id)) {
@@ -932,7 +933,7 @@ const Workflow = () => {
       </Sider>
       <Content style={{ height: '100%', display: 'flex' }}>
         <div style={{ flex: 1, position: 'relative' }}>
-        <div style={{ position: 'absolute', zIndex: 1000, right: 20, top: 20, display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', maxWidth: '70%', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'absolute', zIndex: 1000, right: 20, top: 20, display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', maxWidth: '70%', justifyContent: 'flex-end' }}>
             {dirty && <Tag color="orange">未保存</Tag>}
             <Tooltip title="撤销 (Ctrl+Z)">
               <Button icon={<UndoOutlined />} onClick={handleUndo} disabled={history.length === 0} />
@@ -959,111 +960,111 @@ const Workflow = () => {
             ) : (
               <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleRun}>运行</Button>
             )}
-        </div>
+          </div>
 
-        {initializing ? (
-             <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                 <Spin size="large" tip="正在加载工作流..." />
-             </div>
-        ) : (
-            <div className="dndflow" style={{ height: 'calc(100vh - 0px)' }} ref={reactFlowWrapper}>
-            <ReactFlowProvider>
-                <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={onNodeClick}
-                onPaneClick={onPaneClick}
-                onInit={setReactFlowInstance}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                deleteKeyCode={['Backspace', 'Delete']}
-                onNodesDelete={onNodesDelete}
-                onEdgesDelete={onEdgesDelete}
-                onNodeDragStop={() => commitSnapshot()}
-                fitView
-                >
-                <Controls />
-                <Background color="#f0f2f5" gap={16} />
-                </ReactFlow>
-            </ReactFlowProvider>
+          {initializing ? (
+            <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <Spin size="large" tip="正在加载工作流..." />
             </div>
-        )}
+          ) : (
+            <div className="dndflow" style={{ height: 'calc(100vh - 0px)' }} ref={reactFlowWrapper}>
+              <ReactFlowProvider>
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  onNodeClick={onNodeClick}
+                  onPaneClick={onPaneClick}
+                  onInit={setReactFlowInstance}
+                  onDrop={onDrop}
+                  onDragOver={onDragOver}
+                  nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
+                  deleteKeyCode={['Backspace', 'Delete']}
+                  onNodesDelete={onNodesDelete}
+                  onEdgesDelete={onEdgesDelete}
+                  onNodeDragStop={() => commitSnapshot()}
+                  fitView
+                >
+                  <Controls />
+                  <Background color="#f0f2f5" gap={16} />
+                </ReactFlow>
+              </ReactFlowProvider>
+            </div>
+          )}
         </div>
 
         {/* Right Property Panel */}
         <Sider width={260} theme="light" style={{ borderLeft: '1px solid #f0f0f0', display: selectedNodeId ? 'block' : 'none' }}>
-            <PropertyPanel
-                selectedNode={selectedNode}
-                inputNode={inputNode}
-                rootNode={rootNode}
-                onNodeDataChange={onNodeDataChange}
-                onDuplicate={duplicateNode}
-            />
+          <PropertyPanel
+            selectedNode={selectedNode}
+            inputNode={inputNode}
+            rootNode={rootNode}
+            onNodeDataChange={onNodeDataChange}
+            onDuplicate={duplicateNode}
+          />
         </Sider>
       </Content>
 
-        {/* Save Modal */}
-        <Modal
-            title="保存工作流"
-            open={saveModalVisible}
-            onOk={handleSave}
-            onCancel={() => setSaveModalVisible(false)}
-        >
-            <Input
-                placeholder="工作流名称"
-                value={workflowName}
-                onChange={e => setWorkflowName(e.target.value)}
-            />
-        </Modal>
+      {/* Save Modal */}
+      <Modal
+        title="保存工作流"
+        open={saveModalVisible}
+        onOk={handleSave}
+        onCancel={() => setSaveModalVisible(false)}
+      >
+        <Input
+          placeholder="工作流名称"
+          value={workflowName}
+          onChange={e => setWorkflowName(e.target.value)}
+        />
+      </Modal>
 
-        {/* Load Modal */}
-        <Modal
-            title="加载工作流"
-            open={loadModalVisible}
-            footer={null}
-            onCancel={() => setLoadModalVisible(false)}
-        >
-            <List
-                dataSource={savedWorkflows}
-                renderItem={(item: any) => (
-                    <List.Item
-                        actions={[
-                            <Button type="link" onClick={() => handleLoadConfirm(item.name)}>加载</Button>,
-                            <Popconfirm title="确定删除该工作流吗？" onConfirm={() => handleDeleteWorkflow(item.name)}>
-                                <Button type="text" danger icon={<DeleteOutlined />} />
-                            </Popconfirm>,
-                        ]}
-                    >
-                        <List.Item.Meta
-                            title={item.name}
-                            description={item.updated_at ? new Date(item.updated_at * 1000).toLocaleString() : ''}
-                        />
-                    </List.Item>
-                )}
-            />
-        </Modal>
+      {/* Load Modal */}
+      <Modal
+        title="加载工作流"
+        open={loadModalVisible}
+        footer={null}
+        onCancel={() => setLoadModalVisible(false)}
+      >
+        <List
+          dataSource={savedWorkflows}
+          renderItem={(item: any) => (
+            <List.Item
+              actions={[
+                <Button type="link" onClick={() => handleLoadConfirm(item.name)}>加载</Button>,
+                <Popconfirm title="确定删除该工作流吗？" onConfirm={() => handleDeleteWorkflow(item.name)}>
+                  <Button type="text" danger icon={<DeleteOutlined />} />
+                </Popconfirm>,
+              ]}
+            >
+              <List.Item.Meta
+                title={item.name}
+                description={item.updated_at ? new Date(item.updated_at * 1000).toLocaleString() : ''}
+              />
+            </List.Item>
+          )}
+        />
+      </Modal>
 
-        {/* Run History Modal */}
-        <Modal
-            title="运行历史"
-            open={historyModalVisible}
-            footer={null}
-            onCancel={() => setHistoryModalVisible(false)}
-            width={720}
-        >
-            <Table
-                dataSource={runHistory}
-                columns={historyColumns}
-                rowKey={(record: any) => `${record.time}_${record.node_id || record.algorithm}`}
-                size="small"
-                pagination={{ pageSize: 10 }}
-            />
-        </Modal>
+      {/* Run History Modal */}
+      <Modal
+        title="运行历史"
+        open={historyModalVisible}
+        footer={null}
+        onCancel={() => setHistoryModalVisible(false)}
+        width={720}
+      >
+        <Table
+          dataSource={runHistory}
+          columns={historyColumns}
+          rowKey={(record: any) => `${record.time}_${record.node_id || record.algorithm}`}
+          size="small"
+          pagination={{ pageSize: 10 }}
+        />
+      </Modal>
 
     </Layout>
   );

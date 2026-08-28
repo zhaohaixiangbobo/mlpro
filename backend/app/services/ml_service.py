@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans, DBSCAN
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, r2_score, silhouette_score, mean_absolute_error, calinski_harabasz_score, davies_bouldin_score 
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, r2_score, silhouette_score, mean_absolute_error, calinski_harabasz_score, davies_bouldin_score
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, LabelEncoder
@@ -39,6 +39,7 @@ AUTO_TUNE_GRIDS = {
     "GBDT回归": {"n_estimators": [50, 100], "learning_rate": [0.05, 0.1]},
 }
 
+
 class MLService:
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
@@ -54,7 +55,7 @@ class MLService:
         file_path = os.path.join(self.data_dir, filename)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {filename} not found")
-        
+
         if filename.endswith(".csv"):
             df = pd.read_csv(file_path)
         elif filename.endswith(".xlsx"):
@@ -74,19 +75,20 @@ class MLService:
                 method = step.get("method")
                 params = step.get("params", {})
                 columns = params.get("columns", [])
-                
+
                 # If columns is empty, select applicable columns based on method
                 if not columns:
                     if method in ["mean", "median", "mode", "standard", "minmax"]:
-                         # Numeric columns only
-                         columns = df.select_dtypes(include=[np.number]).columns.tolist()
+                        # Numeric columns only
+                        columns = df.select_dtypes(
+                            include=[np.number]).columns.tolist()
                     elif method == "drop":
-                         # All columns
-                         columns = df.columns.tolist()
+                        # All columns
+                        columns = df.columns.tolist()
 
                 # Ensure columns exist in df
                 columns = [c for c in columns if c in df.columns]
-                
+
                 # Exclude label column from processing
                 if label_col and label_col in columns:
                     columns.remove(label_col)
@@ -96,34 +98,39 @@ class MLService:
 
                 if method == "drop":
                     df = df.dropna(subset=columns)
-                
-                elif method == "mean":
-                    imputer = SimpleImputer(strategy="mean")
-                    df[columns] = imputer.fit_transform(df[columns])
-                
-                elif method == "median":
-                    imputer = SimpleImputer(strategy="median")
-                    df[columns] = imputer.fit_transform(df[columns])
-                
-                elif method == "mode":
-                    imputer = SimpleImputer(strategy="most_frequent")
-                    df[columns] = imputer.fit_transform(df[columns])
+
+                elif method in ("mean", "median", "mode"):
+                    # 按 dtype 分组分别填充：数值列用指定策略，文本列统一用众数填充。
+                    # 避免把文本列和数值列丢进同一个 SimpleImputer（混合列会返回 object 数组，
+                    # 赋值回 DataFrame 后数值列变成非数值类型，导致后续特征筛选丢失全部数值特征）。
+                    num_cols = [
+                        c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
+                    cat_cols = [c for c in columns if c not in num_cols]
+                    if num_cols:
+                        # mean/median 只对数值列有意义；mode 对数值列同样用众数填充
+                        num_strategy = method if method in (
+                            "mean", "median") else "most_frequent"
+                        imputer = SimpleImputer(strategy=num_strategy)
+                        df[num_cols] = imputer.fit_transform(df[num_cols])
+                    if cat_cols:
+                        imputer = SimpleImputer(strategy="most_frequent")
+                        df[cat_cols] = imputer.fit_transform(df[cat_cols])
 
                 elif method == "standard":
                     scaler = StandardScaler()
                     df[columns] = scaler.fit_transform(df[columns])
-                
+
                 elif method == "minmax":
                     scaler = MinMaxScaler()
                     df[columns] = scaler.fit_transform(df[columns])
-                
+
                 else:
                     raise ValueError(f"Unknown preprocessing method: {method}")
 
             except Exception as e:
                 # Re-raise with step info
                 raise RuntimeError(f"Step {i+1} ({method}): {str(e)}")
-        
+
         return df
 
     def _evaluate_model(self, model, X_test, y_test, task_type, label_map: dict = None):
@@ -150,12 +157,15 @@ class MLService:
                     n = min(10, len(proba))
                     idxs = np.linspace(0, len(proba) - 1, n).astype(int)
                     for i in idxs:
-                        yt = y_test.iloc[i] if hasattr(y_test, "iloc") else y_test[i]
+                        yt = y_test.iloc[i] if hasattr(
+                            y_test, "iloc") else y_test[i]
+
                         def disp(v):
                             if label_map:
                                 return label_map.get(int(v), str(v))
                             return str(v)
-                        row = {"actual": disp(yt), "predicted": disp(y_pred[i])}
+                        row = {"actual": disp(
+                            yt), "predicted": disp(y_pred[i])}
                         for j, c in enumerate(classes):
                             row[f"p({disp(c)})"] = round(float(proba[i][j]), 4)
                         proba_sample.append(row)
@@ -163,7 +173,7 @@ class MLService:
                     proba_sample = []
             result["probabilities"] = proba_sample
             return result
-        
+
         elif task_type == "regression":
             y_pred = model.predict(X_test)
             mse = mean_squared_error(y_test, y_pred)
@@ -176,10 +186,12 @@ class MLService:
                 n = min(300, len(y_test))
                 idxs = np.linspace(0, len(y_test) - 1, n).astype(int)
                 for i in idxs:
-                    yt = y_test.iloc[i] if hasattr(y_test, "iloc") else y_test[i]
+                    yt = y_test.iloc[i] if hasattr(
+                        y_test, "iloc") else y_test[i]
                     actual = float(yt)
                     pred = float(y_pred[i])
-                    residuals.append({"actual": actual, "predicted": pred, "residual": round(pred - actual, 6)})
+                    residuals.append(
+                        {"actual": actual, "predicted": pred, "residual": round(pred - actual, 6)})
             except Exception:
                 residuals = []
             return {
@@ -191,16 +203,17 @@ class MLService:
                 "prediction_head": y_pred[:10].tolist(),
                 "residuals": residuals
             }
-        
+
         elif task_type == "clustering":
             # For clustering, X_test is the data itself, y_test might be labels if available (not used here mostly)
             # We assume 'model' is already fitted
-            labels = model.labels_ if hasattr(model, 'labels_') else model.predict(X_test)
-            
+            labels = model.labels_ if hasattr(
+                model, 'labels_') else model.predict(X_test)
+
             unique_labels = set(labels)
             n_clusters = len(unique_labels) - (1 if -1 in labels else 0)
             n_noise = list(labels).count(-1)
-            
+
             metrics = {
                 "type": "clustering",
                 "n_clusters": n_clusters,
@@ -209,21 +222,23 @@ class MLService:
 
             if len(unique_labels) > 1:
                 metrics["silhouette_score"] = silhouette_score(X_test, labels)
-                metrics["calinski_harabasz_score"] = calinski_harabasz_score(X_test, labels)
-                metrics["davies_bouldin_score"] = davies_bouldin_score(X_test, labels)
+                metrics["calinski_harabasz_score"] = calinski_harabasz_score(
+                    X_test, labels)
+                metrics["davies_bouldin_score"] = davies_bouldin_score(
+                    X_test, labels)
             else:
                 metrics["silhouette_score"] = -1
                 metrics["calinski_harabasz_score"] = -1
                 metrics["davies_bouldin_score"] = -1
-                
+
             if hasattr(model, 'inertia_'):
                 metrics["inertia"] = model.inertia_
-                
+
             if hasattr(model, 'cluster_centers_'):
                 metrics["centers"] = model.cluster_centers_.tolist()
-                
+
             return metrics
-            
+
         return {}
 
     def save_model(self, model, node_id: str, le=None):
@@ -263,7 +278,8 @@ class MLService:
 
             # 1.5 Apply column mapping (rename file columns to model features)
             if column_map:
-                rename_map = {file_col: model_feat for model_feat, file_col in column_map.items() if file_col and file_col in df.columns}
+                rename_map = {file_col: model_feat for model_feat, file_col in column_map.items(
+                ) if file_col and file_col in df.columns}
                 df = df.rename(columns=rename_map)
 
             # 2. Preprocessing
@@ -273,31 +289,34 @@ class MLService:
             # 2.5 Chain features
             if chain:
                 df = self._apply_chain_features(df, chain, None)
-            
+
             df_numeric = df.select_dtypes(include=[np.number])
             if df_numeric.empty:
                 raise ValueError("No numeric data found for prediction")
-                
+
             # 3. Load Model
             model = self.load_model(node_id)
-            
+
             # 4. Predict
             # DBSCAN 等模型没有 predict 方法，只支持聚类分析
             if not hasattr(model, "predict"):
-                raise ValueError("该模型不支持预测（DBSCAN 仅支持聚类分析，请使用 K-Means 等可预测的聚类算法）")
+                raise ValueError(
+                    "该模型不支持预测（DBSCAN 仅支持聚类分析，请使用 K-Means 等可预测的聚类算法）")
             # Align columns if possible or assume correct input
             # Ideally we should save feature names with the model to verify.
             # For now, we assume user uploads correct format.
             if hasattr(model, "feature_names_in_"):
-                 # Reorder columns to match training
-                 common_cols = [c for c in model.feature_names_in_ if c in df_numeric.columns]
-                 if len(common_cols) < len(model.feature_names_in_):
-                     missing = set(model.feature_names_in_) - set(common_cols)
-                     raise ValueError(f"预测数据缺少模型特征: {sorted(missing)}。请检查列名，或在预测页面使用列映射功能。")
-                 X = df_numeric[model.feature_names_in_]
+                # Reorder columns to match training
+                common_cols = [
+                    c for c in model.feature_names_in_ if c in df_numeric.columns]
+                if len(common_cols) < len(model.feature_names_in_):
+                    missing = set(model.feature_names_in_) - set(common_cols)
+                    raise ValueError(
+                        f"预测数据缺少模型特征: {sorted(missing)}。请检查列名，或在预测页面使用列映射功能。")
+                X = df_numeric[model.feature_names_in_]
             else:
-                 X = df_numeric
-            
+                X = df_numeric
+
             predictions = model.predict(X)
             # 分类模型：用训练时保存的 LabelEncoder 把编码还原为原始标签值
             try:
@@ -306,19 +325,19 @@ class MLService:
                     predictions = saved_le.inverse_transform(predictions)
             except Exception:
                 pass
-            
+
             # 5. Save Results
             # Create a dataframe with predictions
             result_df = df.copy()
             result_df["prediction"] = predictions
-            
+
             # Generate formatted filename
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M")
             original_name = os.path.splitext(data_file)[0]
             # Truncate original name to 10 chars to keep it short
             original_name_short = original_name[:10]
-            
+
             # Map Chinese algorithm names to English abbreviations
             ALGO_NAME_MAP = {
                 "逻辑回归": "LR",
@@ -336,21 +355,22 @@ class MLService:
                 "K-Means": "KMeans",
                 "DBSCAN": "DBSCAN"
             }
-            
+
             # Use algorithm label if provided, else generic 'Model'
-            algo_tag = ALGO_NAME_MAP.get(algorithm_label, algorithm_label) if algorithm_label else "Model"
+            algo_tag = ALGO_NAME_MAP.get(
+                algorithm_label, algorithm_label) if algorithm_label else "Model"
             # Sanitize tag
             algo_tag = "".join(c for c in algo_tag if c.isalnum())
-            
+
             pred_filename = f"pred_{original_name_short}_{algo_tag}_{timestamp}.csv"
             # Handle excel extension if original was excel? For now output as csv is safer/simpler
             # But let's respect output format based on extension logic below
-            
+
             if data_file.endswith(".xlsx"):
-                 pred_filename = pred_filename.replace(".csv", ".xlsx")
+                pred_filename = pred_filename.replace(".csv", ".xlsx")
 
             pred_path = os.path.join(self.data_dir, pred_filename)
-            
+
             if pred_filename.endswith(".csv"):
                 result_df.to_csv(pred_path, index=False)
             else:
@@ -367,12 +387,12 @@ class MLService:
                     json.dump(pred_meta, f, ensure_ascii=False, indent=2)
             except Exception:
                 pass
-                
+
             return {
                 "filename": pred_filename,
                 "preview": result_df.head(10).to_dict(orient="records")
             }
-            
+
         except Exception as e:
             raise RuntimeError(f"Prediction failed: {str(e)}")
 
@@ -388,15 +408,15 @@ class MLService:
         """
         try:
             df = self.load_data(filename)
-            
+
             # Auto-detect label if not provided
             if not label_col:
                 meta = self._load_meta(filename)
                 label_col = meta.get("label_column")
-            
+
             # Select numeric columns
             df_numeric = df.select_dtypes(include=[np.number])
-            
+
             # Handle labels
             labels = None
             if label_col and label_col in df.columns:
@@ -404,36 +424,38 @@ class MLService:
                 # Remove label from features if it is in numeric
                 if label_col in df_numeric.columns:
                     df_numeric = df_numeric.drop(columns=[label_col])
-            
+
             # 1. Handle Infinite values and NaNs (Critical Fix)
             # Replace inf/-inf with NaN, then drop rows with NaNs
             df_numeric = df_numeric.replace([np.inf, -np.inf], np.nan).dropna()
-            
+
             # 2. Check data shape after cleaning
             if df_numeric.empty or len(df_numeric) < 2:
                 # PCA requires at least 2 samples
                 print("PCA Skipped: Not enough samples (need >= 2)")
                 return []
-            
+
             # Check feature count
             if df_numeric.shape[1] < 2:
-                 print(f"PCA Skipped: Not enough features (need >= 2, got {df_numeric.shape[1]})")
-                 return []
-            
+                print(
+                    f"PCA Skipped: Not enough features (need >= 2, got {df_numeric.shape[1]})")
+                return []
+
             # Update labels to match the filtered data (if rows were dropped)
             if labels and len(labels) != len(df_numeric):
                 # Align labels using the index of the remaining rows
                 if label_col:
-                     labels = df.loc[df_numeric.index, label_col].fillna("Unknown").astype(str).tolist()
+                    labels = df.loc[df_numeric.index, label_col].fillna(
+                        "Unknown").astype(str).tolist()
 
             # Standardize
             scaler = StandardScaler()
             data_scaled = scaler.fit_transform(df_numeric)
-            
+
             # PCA
             pca = PCA(n_components=2)
             coords = pca.fit_transform(data_scaled)
-            
+
             result = []
             for i in range(len(coords)):
                 point = {
@@ -443,7 +465,7 @@ class MLService:
                 if labels:
                     point["label"] = labels[i]
                 result.append(point)
-                
+
             return result
 
         except Exception as e:
@@ -495,8 +517,10 @@ class MLService:
                   "n_clusters": n, "n_noise": n}
         """
         try:
-            model, X = self._fit_clustering(data_file, algorithm, params, preprocessing)
-            labels = model.labels_ if hasattr(model, "labels_") else model.predict(X)
+            model, X = self._fit_clustering(
+                data_file, algorithm, params, preprocessing)
+            labels = model.labels_ if hasattr(
+                model, "labels_") else model.predict(X)
             labels = np.asarray(labels)
 
             scaler = StandardScaler()
@@ -510,7 +534,8 @@ class MLService:
             ]
             centers = []
             if hasattr(model, "cluster_centers_"):
-                centers_pc = pca.transform(scaler.transform(model.cluster_centers_))
+                centers_pc = pca.transform(
+                    scaler.transform(model.cluster_centers_))
                 centers = [
                     {"x": float(c[0]), "y": float(c[1]), "cluster": int(i)}
                     for i, c in enumerate(centers_pc)
@@ -550,7 +575,8 @@ class MLService:
 
             ks, inertia, silhouette = [], [], []
             for k in range(1, int(k_max) + 1):
-                km = KMeans(n_clusters=k, **model_params, random_state=random_state)
+                km = KMeans(n_clusters=k, **model_params,
+                            random_state=random_state)
                 km.fit(df_numeric)
                 ks.append(k)
                 inertia.append(float(km.inertia_))
@@ -607,7 +633,8 @@ class MLService:
                 raise ValueError(f"链式模型 {node_id} 无可用的数值特征")
             c_model = self.load_model(node_id)
             if hasattr(c_model, "feature_names_in_"):
-                common = [f for f in c_model.feature_names_in_ if f in c_numeric.columns]
+                common = [
+                    f for f in c_model.feature_names_in_ if f in c_numeric.columns]
                 missing = set(c_model.feature_names_in_) - set(common)
                 if missing:
                     raise ValueError(f"链式模型 {node_id} 缺少特征: {sorted(missing)}")
@@ -652,7 +679,7 @@ class MLService:
             df = self.load_data(data_file)
             meta = self._load_meta(data_file)
             label_col = meta.get("label_column")
-            
+
             # 1. Preprocessing
             if preprocessing:
                 df = self.preprocess_data(df, preprocessing, label_col)
@@ -660,15 +687,16 @@ class MLService:
             # 1.5 Chain: 上游模型的预测结果作为额外特征（模型链式建模）
             if chain:
                 df = self._apply_chain_features(df, chain, label_col)
-            
+
             df_numeric = df.select_dtypes(include=[np.number])
             if df_numeric.empty:
-                 raise ValueError("No numeric data found")
-    
+                raise ValueError("No numeric data found")
+
             result = {}
-            
+
             # Classification Algorithms
-            classification_algos = ["逻辑回归", "决策树", "随机森林", "支持向量机 SVM", "KNN", "XGBoost", "LightGBM"]
+            classification_algos = ["逻辑回归", "决策树", "随机森林",
+                                    "支持向量机 SVM", "KNN", "XGBoost", "LightGBM"]
             # Regression Algorithms
             regression_algos = ["线性回归", "岭回归", "Lasso", "随机森林回归", "GBDT回归"]
             # Clustering Algorithms
@@ -684,12 +712,13 @@ class MLService:
             if algorithm in classification_algos or algorithm in regression_algos:
                 # Supervised Learning
                 if not label_col:
-                    raise ValueError(f"Algorithm {algorithm} requires a Label column. Please set a label in Data Management.")
-                
+                    raise ValueError(
+                        f"Algorithm {algorithm} requires a Label column. Please set a label in Data Management.")
+
                 # Check for explicit test file
                 test_file = params.get("test_file")
                 random_state = params.get("random_state", 42)
-                
+
                 # Remove common params that are not model specific or handled separately
                 model_params = params.copy()
                 model_params.pop("test_file", None)
@@ -698,72 +727,80 @@ class MLService:
 
                 # Prepare Train Data
                 if label_col not in df.columns:
-                     raise ValueError(f"Label column {label_col} not found in data")
+                    raise ValueError(
+                        f"Label column {label_col} not found in data")
 
                 # Validate Label Type for Regression
                 if algorithm in regression_algos:
                     if not pd.api.types.is_numeric_dtype(df[label_col]):
                         raise ValueError(f"回归算法需要一个数值型Label列")
-                
+
                 y = df[label_col]
                 X = df_numeric.drop(columns=[label_col], errors='ignore')
-                
+
                 # Encode Label if Classification
                 le = None
                 if algorithm in classification_algos:
                     le = LabelEncoder()
                     y = le.fit_transform(y)
-                
+
                 if X.empty:
-                     raise ValueError("No features left after dropping label")
+                    raise ValueError("No features left after dropping label")
 
                 if test_file:
                     # Explicit Test Set Strategy
                     # Load Test Data
                     df_test = self.load_data(test_file)
-                    
+
                     # Apply Preprocessing to Test Data (SAME AS TRAIN)
                     if preprocessing:
-                        df_test = self.preprocess_data(df_test, preprocessing, label_col)
-                    
-                    df_test_numeric = df_test.select_dtypes(include=[np.number])
-                    
+                        df_test = self.preprocess_data(
+                            df_test, preprocessing, label_col)
+
+                    df_test_numeric = df_test.select_dtypes(
+                        include=[np.number])
+
                     if label_col not in df_test.columns:
-                        raise ValueError(f"Label column {label_col} not found in test data")
-                        
+                        raise ValueError(
+                            f"Label column {label_col} not found in test data")
+
                     y_test = df_test[label_col]
-                    
+
                     # Transform Test Labels if Classification
                     if algorithm in classification_algos and le is not None:
-                        # Handle unseen labels by filtering or erroring? 
+                        # Handle unseen labels by filtering or erroring?
                         # For simplicity, we assume test labels are subset of train labels or we let it error if not found.
                         # Or better: fit on combined, but that leaks info.
                         # Standard way: fit on train, transform test.
                         try:
                             y_test = le.transform(y_test)
                         except ValueError as e:
-                             # Fallback or meaningful error
-                             raise ValueError(f"Test data contains labels not seen in training data: {str(e)}")
+                            # Fallback or meaningful error
+                            raise ValueError(
+                                f"Test data contains labels not seen in training data: {str(e)}")
 
-                    X_test = df_test_numeric.drop(columns=[label_col], errors='ignore')
-                    
+                    X_test = df_test_numeric.drop(
+                        columns=[label_col], errors='ignore')
+
                     # Align columns (Test set must have same columns as Train set)
                     # Get common columns
                     common_cols = X.columns.intersection(X_test.columns)
                     X = X[common_cols]
                     X_test = X_test[common_cols]
-                    
+
                     X_train = X
                     y_train = y
                     # X_test, y_test are already set
-                    
+
                 else:
                     # Default Split Strategy: 自动划分 80/20，并把留出测试集导出为文件，
                     # 模型预测页可直接选用（无需手动划分/上传）
-                    df_train, df_test = train_test_split(df, test_size=0.2, random_state=random_state)
+                    df_train, df_test = train_test_split(
+                        df, test_size=0.2, random_state=random_state)
                     auto_test_file = None
                     try:
-                        auto_test_file = self.export_holdout_test(df_test, data_file)
+                        auto_test_file = self.export_holdout_test(
+                            df_test, data_file)
                     except Exception:
                         auto_test_file = None
                     if le is not None:
@@ -783,55 +820,68 @@ class MLService:
                     else:
                         y_train = df_train[label_col]
                         y_test = df_test[label_col]
-                    X_train = df_train.select_dtypes(include=[np.number]).drop(columns=[label_col], errors='ignore')
-                    X_test = df_test.select_dtypes(include=[np.number]).drop(columns=[label_col], errors='ignore')
-                
+                    X_train = df_train.select_dtypes(include=[np.number]).drop(
+                        columns=[label_col], errors='ignore')
+                    X_test = df_test.select_dtypes(include=[np.number]).drop(
+                        columns=[label_col], errors='ignore')
+
                 # Initialize Model
-                
+
                 # Classification
                 if algorithm == "逻辑回归":
-                    model = LogisticRegression(**model_params, random_state=random_state)
+                    model = LogisticRegression(
+                        **model_params, random_state=random_state)
                 elif algorithm == "决策树":
-                    model = DecisionTreeClassifier(**model_params, random_state=random_state)
+                    model = DecisionTreeClassifier(
+                        **model_params, random_state=random_state)
                 elif algorithm == "随机森林":
-                    model = RandomForestClassifier(**model_params, random_state=random_state)
+                    model = RandomForestClassifier(
+                        **model_params, random_state=random_state)
                 elif algorithm == "支持向量机 SVM":
                     svc_params = dict(model_params)
-                    svc_params.setdefault("probability", True)  # 输出概率需要 probability=True
+                    # 输出概率需要 probability=True
+                    svc_params.setdefault("probability", True)
                     model = SVC(**svc_params, random_state=random_state)
                 elif algorithm == "KNN":
-                    model = KNeighborsClassifier(**model_params) # KNN has no random_state
+                    model = KNeighborsClassifier(
+                        **model_params)  # KNN has no random_state
                 elif algorithm == "XGBoost":
                     if XGBClassifier is None:
                         raise ValueError("XGBoost library is not installed.")
                     # 注意: xgboost >= 2.0 已移除 use_label_encoder 参数，不能再传入
-                    model = XGBClassifier(**model_params, random_state=random_state, eval_metric='logloss')
+                    model = XGBClassifier(
+                        **model_params, random_state=random_state, eval_metric='logloss')
                 elif algorithm == "LightGBM":
                     if LGBMClassifier is None:
                         raise ValueError("LightGBM library is not installed.")
-                    model = LGBMClassifier(**model_params, random_state=random_state)
-                
+                    model = LGBMClassifier(
+                        **model_params, random_state=random_state)
+
                 # Regression
                 elif algorithm == "线性回归":
-                    model = LinearRegression(**model_params) # No random_state
+                    model = LinearRegression(**model_params)  # No random_state
                 elif algorithm == "岭回归":
                     model = Ridge(**model_params, random_state=random_state)
                 elif algorithm == "Lasso":
                     model = Lasso(**model_params, random_state=random_state)
                 elif algorithm == "随机森林回归":
-                    model = RandomForestRegressor(**model_params, random_state=random_state)
+                    model = RandomForestRegressor(
+                        **model_params, random_state=random_state)
                 elif algorithm == "GBDT回归":
-                    model = GradientBoostingRegressor(**model_params, random_state=random_state)
+                    model = GradientBoostingRegressor(
+                        **model_params, random_state=random_state)
 
                 if model is None:
-                     raise ValueError(f"Algorithm {algorithm} implementation pending")
+                    raise ValueError(
+                        f"Algorithm {algorithm} implementation pending")
 
                 # 自动调参（GridSearchCV）
                 tune_note = {}
                 if params.get("auto_tune") and algorithm in AUTO_TUNE_GRIDS:
                     # 线程后端：Windows 下 joblib 多进程池无法回收会泄漏 numpy worker 进程，拖垮系统
                     with parallel_backend("threading", n_jobs=2):
-                        grid_cv = GridSearchCV(model, AUTO_TUNE_GRIDS[algorithm], cv=3, n_jobs=2)
+                        grid_cv = GridSearchCV(
+                            model, AUTO_TUNE_GRIDS[algorithm], cv=3, n_jobs=2)
                     grid_cv.fit(X_train, y_train)
                     model = grid_cv.best_estimator_
                     tune_note = {
@@ -840,13 +890,14 @@ class MLService:
                     }
                 else:
                     model.fit(X_train, y_train)
-                
+
                 # ---------- 评估深度：交叉验证 ----------
                 cv_folds = 5 if len(X_train) >= 100 else 3
                 cv_scores, cv_mean, cv_std = [], None, None
                 try:
                     with parallel_backend("threading", n_jobs=2):
-                        scores = cross_val_score(model, X_train, y_train, cv=cv_folds, n_jobs=2)
+                        scores = cross_val_score(
+                            model, X_train, y_train, cv=cv_folds, n_jobs=2)
                     cv_scores = [round(float(s), 4) for s in scores]
                     cv_mean = float(np.mean(scores))
                     cv_std = float(np.std(scores))
@@ -888,16 +939,19 @@ class MLService:
                         )
                 except Exception:
                     feature_importance = None
-                
+
                 # Evaluate
                 task_type = "classification" if algorithm in classification_algos else "regression"
                 label_map = None
                 if task_type == "classification" and le is not None:
-                    label_map = {int(le.transform([c])[0]): str(c) for c in le.classes_}
+                    label_map = {int(le.transform([c])[0]): str(
+                        c) for c in le.classes_}
                 # Save Model if node_id provided (分类模型附上 LabelEncoder 以便预测还原原始标签)
                 if node_id:
-                    self.save_model(model, node_id, le if task_type == "classification" else None)
-                result = self._evaluate_model(model, X_test, y_test, task_type, label_map)
+                    self.save_model(
+                        model, node_id, le if task_type == "classification" else None)
+                result = self._evaluate_model(
+                    model, X_test, y_test, task_type, label_map)
                 result.update(tune_note)
                 if auto_test_file:
                     result["auto_test_file"] = auto_test_file
@@ -911,21 +965,22 @@ class MLService:
                     result["learning_curve"] = learning_curve_data
                 if feature_importance:
                     result["feature_importance"] = feature_importance
-    
+
             elif algorithm in clustering_algos:
                 # Unsupervised
-                model, X = self._fit_clustering(data_file, algorithm, params, preprocessing)
-                
+                model, X = self._fit_clustering(
+                    data_file, algorithm, params, preprocessing)
+
                 # Save Model if node_id provided
                 if node_id:
                     self.save_model(model, node_id)
 
                 # Evaluate Clustering
                 result = self._evaluate_model(model, X, None, "clustering")
-                
+
             else:
                 raise ValueError(f"Unknown algorithm: {algorithm}")
-                
+
             return result
         except RuntimeError as e:
             raise e

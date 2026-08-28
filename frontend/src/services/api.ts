@@ -1,22 +1,25 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
-  timeout: 300000, // 5 minutes: ML training / report export can take a while
+    // 使用同源相对路径：生产环境由 Nginx 反向代理 /api 到后端，
+    // 开发环境由 vite.config.ts 的 proxy 转发到 127.0.0.1:8000。
+    // 不可写成 http://localhost:8000，否则线上会指向用户自己的电脑。
+    baseURL: '/api',
+    timeout: 300000, // 5 minutes: ML training / report export can take a while
 });
 
 // Add a request interceptor
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+    (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
 );
 
 // Auth APIs
@@ -39,38 +42,38 @@ export const getMe = async () => {
 };
 
 export const uploadData = async (file: File, encoding: string = 'auto', delimiter: string = '') => {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('encoding', encoding);
-  formData.append('delimiter', delimiter);
-  const response = await api.post('/data/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return response.data;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('encoding', encoding);
+    formData.append('delimiter', delimiter);
+    const response = await api.post('/data/upload', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    return response.data;
 };
 
 export const deleteRows = async (filename: string, indices: number[]) => {
-  const response = await api.post('/data/rows/delete', { filename, indices });
-  return response.data;
+    const response = await api.post('/data/rows/delete', { filename, indices });
+    return response.data;
 };
 
 export const loadDemoData = async (name: string) => {
-  const response = await api.post('/data/demo', { name });
-  return response.data;
+    const response = await api.post('/data/demo', { name });
+    return response.data;
 };
 
 export const getPreview = async (filename: string, page: number = 1, limit: number = 20) => {
-  const response = await api.get(`/data/preview/${filename}`, {
-    params: { page, limit }
-  });
-  return response.data;
+    const response = await api.get(`/data/preview/${filename}`, {
+        params: { page, limit }
+    });
+    return response.data;
 };
 
 export const listFiles = async () => {
-  const response = await api.get('/data/list');
-  return response.data;
+    const response = await api.get('/data/list');
+    return response.data;
 };
 
 export const splitData = async (payload: {
@@ -208,14 +211,14 @@ export const exportReport = async (workflowName: string, format: 'docx' | 'pdf')
     const response = await api.post('/report/export', { workflow_name: workflowName, format }, {
         responseType: 'blob'
     });
-    
+
     // Get filename from header or default
     let filename = `${workflowName}_report.${format}`;
     const disposition = response.headers['content-disposition'];
     if (disposition && disposition.indexOf('attachment') !== -1) {
         const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
         const matches = filenameRegex.exec(disposition);
-        if (matches != null && matches[1]) { 
+        if (matches != null && matches[1]) {
             filename = matches[1].replace(/['"]/g, '');
         }
     }
