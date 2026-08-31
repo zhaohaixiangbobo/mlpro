@@ -207,23 +207,25 @@ export const getKMeansElbow = async (payload: {
     return response.data;
 };
 
-export const exportReport = async (workflowName: string, format: 'docx' | 'pdf') => {
-    const response = await api.post('/report/export', { workflow_name: workflowName, format }, {
-        responseType: 'blob'
-    });
-
-    // Get filename from header or default
-    let filename = `${workflowName}_report.${format}`;
-    const disposition = response.headers['content-disposition'];
-    if (disposition && disposition.indexOf('attachment') !== -1) {
-        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-        const matches = filenameRegex.exec(disposition);
-        if (matches != null && matches[1]) {
-            filename = matches[1].replace(/['"]/g, '');
+// 从 Content-Disposition 解析文件名：优先 RFC 5987 的 filename*（支持中文），回退到 filename
+const resolveFilename = (disposition: string | undefined, fallback: string) => {
+    if (!disposition) return fallback;
+    const star = /filename\*=UTF-8''([^;\n]*)/i.exec(disposition);
+    if (star && star[1]) {
+        try {
+            return decodeURIComponent(star[1]);
+        } catch {
+            // 解码失败则继续尝试普通 filename
         }
     }
+    const plain = /filename="?([^";\n]*)"?/i.exec(disposition);
+    if (plain && plain[1]) return plain[1].trim();
+    return fallback;
+};
 
-    const url = window.URL.createObjectURL(new Blob([response.data]));
+const triggerDownload = (data: BlobPart, filename: string, mimeType?: string) => {
+    const blob = mimeType ? new Blob([data], { type: mimeType }) : new Blob([data]);
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', filename);
@@ -231,6 +233,55 @@ export const exportReport = async (workflowName: string, format: 'docx' | 'pdf')
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+};
+
+// responseType 为 blob 时，后端返回的 JSON 错误体也会是 Blob，
+// 直接读 error.response.data.detail 只能拿到空对象，必须先转成文本再解析
+export const extractBlobError = async (error: any, fallback: string) => {
+    const data = error?.response?.data;
+    if (data instanceof Blob) {
+        try {
+            const text = await data.text();
+            const parsed = JSON.parse(text);
+            return parsed?.detail || fallback;
+        } catch {
+            return fallback;
+        }
+    }
+    return data?.detail || error?.message || fallback;
+};
+
+export const exportReport = async (workflowName: string, format: 'docx' | 'pdf') => {
+    const response = await api.post('/report/export', { workflow_name: workflowName, format }, {
+        responseType: 'blob'
+    });
+    const filename = resolveFilename(
+        response.headers['content-disposition'],
+        `${workflowName}_report.${format}`
+    );
+    triggerDownload(response.data, filename);
+};
+
+export const exportClusterExcel = async (payload: {
+    filename: string;
+    algorithm: string;
+    params: Record<string, any>;
+    preprocessing?: any[];
+    cluster_names?: Record<string, string>;
+}) => {
+    const response = await api.post('/data/cluster/export', payload, {
+        responseType: 'blob'
+    });
+    const base = payload.filename.replace(/\.[^.]+$/, '');
+    const filename = resolveFilename(
+        response.headers['content-disposition'],
+        `${base}_聚类结果.xlsx`
+    );
+    triggerDownload(
+        response.data,
+        filename,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
 };
 
 export default api;

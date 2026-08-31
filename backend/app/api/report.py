@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from app.api.http_utils import content_disposition
 import json
 import os
 import io
@@ -678,7 +679,9 @@ async def export_report(
         return StreamingResponse(
             file_stream,
             media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            # 工作流名可能含中文，必须走 RFC 5987 编码，
+            # 否则 HTTP 头 latin-1 编码失败，请求直接 500
+            headers={"Content-Disposition": content_disposition(filename)}
         )
 
     except Exception as e:

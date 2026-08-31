@@ -14,7 +14,7 @@ export const defaultParams: any = {
     'KNN': { n_neighbors: 5, weights: 'uniform', algorithm: 'auto', leaf_size: 30, p: 2, random_state: 42 },
     'XGBoost': { n_estimators: 100, learning_rate: 0.1, max_depth: 3, subsample: 1.0, colsample_bytree: 1.0, random_state: 42 },
     'LightGBM': { n_estimators: 100, learning_rate: 0.1, max_depth: 3, num_leaves: 31, min_child_samples: 20, random_state: 42 },
-    
+
     // Regression
     '线性回归': { fit_intercept: true, copy_X: true, n_jobs: null, positive: false, random_state: 42 },
     '岭回归': { alpha: 1.0, fit_intercept: true, max_iter: null, tol: 0.001, solver: 'auto', random_state: 42 },
@@ -74,18 +74,18 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
 
     const renderCommonFields = () => (
         <>
-            <Form.Item 
-                name="random_state" 
-                label="随机种子" 
+            <Form.Item
+                name="random_state"
+                label="随机种子"
                 tooltip="控制随机性，固定种子可复现结果"
             >
                 <InputNumber step={1} style={{ width: '100%' }} />
             </Form.Item>
-            
+
             {!isClustering && (
-                <Form.Item 
-                    name="test_file" 
-                    label="测试集文件 (可选)" 
+                <Form.Item
+                    name="test_file"
+                    label="测试集文件 (可选)"
                     tooltip="若选择，将使用该文件作为测试集，不再自动切分训练数据"
                 >
                     <Select placeholder="请选择测试文件" allowClear>
@@ -105,22 +105,22 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case '逻辑回归':
                 return (
                     <>
-                        <Form.Item 
-                            name="C" 
+                        <Form.Item
+                            name="C"
                             label="正则化强度 (C)"
                             tooltip="数值越小，正则化越强，可防止过拟合"
                         >
                             <InputNumber step={0.1} min={0.01} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="max_iter" 
+                        <Form.Item
+                            name="max_iter"
                             label="最大迭代次数"
                             tooltip="求解器收敛的最大迭代次数"
                         >
                             <InputNumber step={10} min={1} style={{ width: '100%' }} />
                         </Form.Item>
-                         <Form.Item 
-                            name="solver" 
+                        <Form.Item
+                            name="solver"
                             label="求解器"
                             tooltip="优化问题的算法"
                         >
@@ -132,8 +132,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="saga">saga</Option>
                             </Select>
                         </Form.Item>
-                         <Form.Item 
-                            name="penalty" 
+                        <Form.Item
+                            name="penalty"
                             label="正则化类型"
                             tooltip="指定正则化的规范"
                         >
@@ -150,15 +150,15 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case '决策树':
                 return (
                     <>
-                        <Form.Item 
-                            name="max_depth" 
+                        <Form.Item
+                            name="max_depth"
                             label="最大深度"
                             tooltip="树的最大深度，防止过拟合"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} placeholder="不限制" />
                         </Form.Item>
-                        <Form.Item 
-                            name="criterion" 
+                        <Form.Item
+                            name="criterion"
                             label="划分标准"
                             tooltip="用于测量分割质量的函数"
                         >
@@ -167,15 +167,15 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="entropy">信息熵</Option>
                             </Select>
                         </Form.Item>
-                        <Form.Item 
-                            name="min_samples_split" 
+                        <Form.Item
+                            name="min_samples_split"
                             label="最小分割样本数"
                             tooltip="拆分内部节点所需的最小样本数"
                         >
                             <InputNumber min={2} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="min_samples_leaf" 
+                        <Form.Item
+                            name="min_samples_leaf"
                             label="最小叶子样本数"
                             tooltip="叶节点所需的最小样本数"
                         >
@@ -184,33 +184,33 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                         {renderCommonFields()}
                     </>
                 );
-             case '随机森林':
-             case '随机森林回归':
+            case '随机森林':
+            case '随机森林回归':
                 return (
                     <>
-                        <Form.Item 
-                            name="n_estimators" 
+                        <Form.Item
+                            name="n_estimators"
                             label="树的数量"
                             tooltip="森林中树木的数量"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="max_depth" 
+                        <Form.Item
+                            name="max_depth"
                             label="最大深度"
                             tooltip="每棵树的最大深度"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} placeholder="不限制" />
                         </Form.Item>
-                        <Form.Item 
-                            name="min_samples_split" 
+                        <Form.Item
+                            name="min_samples_split"
                             label="最小分割样本数"
                             tooltip="拆分内部节点所需的最小样本数"
                         >
                             <InputNumber min={2} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="min_samples_leaf" 
+                        <Form.Item
+                            name="min_samples_leaf"
                             label="最小叶子样本数"
                             tooltip="叶节点所需的最小样本数"
                         >
@@ -222,15 +222,15 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case '支持向量机 SVM':
                 return (
                     <>
-                        <Form.Item 
-                            name="C" 
+                        <Form.Item
+                            name="C"
                             label="正则化强度 (C)"
                             tooltip="数值越小，正则化越强，可防止过拟合"
                         >
                             <InputNumber step={0.1} min={0.01} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="kernel" 
+                        <Form.Item
+                            name="kernel"
                             label="核函数"
                             tooltip="用于将数据映射到高维空间的算法"
                         >
@@ -241,8 +241,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="sigmoid">Sigmoid</Option>
                             </Select>
                         </Form.Item>
-                        <Form.Item 
-                            name="gamma" 
+                        <Form.Item
+                            name="gamma"
                             label="Gamma"
                             tooltip="核系数，'scale' 或 'auto'"
                         >
@@ -251,8 +251,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="auto">Auto</Option>
                             </Select>
                         </Form.Item>
-                        <Form.Item 
-                            name="degree" 
+                        <Form.Item
+                            name="degree"
                             label="多项式阶数"
                             tooltip="仅对 'poly' 核有效"
                         >
@@ -264,15 +264,15 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case 'KNN':
                 return (
                     <>
-                        <Form.Item 
-                            name="n_neighbors" 
+                        <Form.Item
+                            name="n_neighbors"
                             label="邻居数量 (K)"
                             tooltip="用于投票的最近邻居数量"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="weights" 
+                        <Form.Item
+                            name="weights"
                             label="权重函数"
                             tooltip="预测中使用的权重函数"
                         >
@@ -281,8 +281,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="distance">Distance (距离加权)</Option>
                             </Select>
                         </Form.Item>
-                         <Form.Item 
-                            name="algorithm" 
+                        <Form.Item
+                            name="algorithm"
                             label="算法"
                             tooltip="用于计算最近邻居的算法"
                         >
@@ -293,8 +293,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="brute">Brute</Option>
                             </Select>
                         </Form.Item>
-                        <Form.Item 
-                            name="p" 
+                        <Form.Item
+                            name="p"
                             label="距离度量 (p)"
                             tooltip="1=曼哈顿距离, 2=欧几里得距离"
                         >
@@ -308,29 +308,29 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case 'GBDT回归':
                 return (
                     <>
-                        <Form.Item 
-                            name="n_estimators" 
+                        <Form.Item
+                            name="n_estimators"
                             label="树的数量"
                             tooltip="提升树的数量"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="learning_rate" 
+                        <Form.Item
+                            name="learning_rate"
                             label="学习率"
                             tooltip="提升每一步的步长"
                         >
                             <InputNumber step={0.01} min={0.001} max={1.0} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="max_depth" 
+                        <Form.Item
+                            name="max_depth"
                             label="最大深度"
                             tooltip="基础学习器的最大深度"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="subsample" 
+                        <Form.Item
+                            name="subsample"
                             label="子样本比例"
                             tooltip="训练实例的子样本比率"
                         >
@@ -344,53 +344,53 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case 'Lasso':
                 return (
                     <>
-                         <Form.Item 
-                             name="fit_intercept" 
-                             label="计算截距" 
-                             valuePropName="checked"
-                             tooltip="是否计算模型的截距"
-                         >
-                             <Switch />
-                         </Form.Item>
-                         {(modelType === '岭回归' || modelType === 'Lasso') && (
-                             <Form.Item 
-                                 name="alpha" 
-                                 label="正则化强度"
-                                 tooltip="乘以正则化项的常数"
-                             >
-                                 <InputNumber step={0.1} min={0.01} style={{ width: '100%' }} />
-                             </Form.Item>
-                         )}
-                         {(modelType === '岭回归') && (
-                             <Form.Item 
-                                 name="solver" 
-                                 label="求解器"
-                                 tooltip="计算例程的求解器"
-                             >
-                                 <Select>
-                                     <Option value="auto">Auto</Option>
-                                     <Option value="svd">SVD</Option>
-                                     <Option value="cholesky">Cholesky</Option>
-                                     <Option value="lsqr">LSQR</Option>
-                                     <Option value="sag">SAG</Option>
-                                 </Select>
-                             </Form.Item>
-                         )}
-                         {renderCommonFields()}
+                        <Form.Item
+                            name="fit_intercept"
+                            label="计算截距"
+                            valuePropName="checked"
+                            tooltip="是否计算模型的截距"
+                        >
+                            <Switch />
+                        </Form.Item>
+                        {(modelType === '岭回归' || modelType === 'Lasso') && (
+                            <Form.Item
+                                name="alpha"
+                                label="正则化强度"
+                                tooltip="乘以正则化项的常数"
+                            >
+                                <InputNumber step={0.1} min={0.01} style={{ width: '100%' }} />
+                            </Form.Item>
+                        )}
+                        {(modelType === '岭回归') && (
+                            <Form.Item
+                                name="solver"
+                                label="求解器"
+                                tooltip="计算例程的求解器"
+                            >
+                                <Select>
+                                    <Option value="auto">Auto</Option>
+                                    <Option value="svd">SVD</Option>
+                                    <Option value="cholesky">Cholesky</Option>
+                                    <Option value="lsqr">LSQR</Option>
+                                    <Option value="sag">SAG</Option>
+                                </Select>
+                            </Form.Item>
+                        )}
+                        {renderCommonFields()}
                     </>
                 );
             case 'K-Means':
                 return (
                     <>
-                        <Form.Item 
-                            name="n_clusters" 
+                        <Form.Item
+                            name="n_clusters"
                             label="聚类数 (K)"
                             tooltip="要生成的聚类中心数量"
                         >
                             <InputNumber min={2} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="init" 
+                        <Form.Item
+                            name="init"
                             label="初始化方法"
                             tooltip="初始化质心的方法"
                         >
@@ -399,8 +399,8 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
                                 <Option value="random">Random</Option>
                             </Select>
                         </Form.Item>
-                        <Form.Item 
-                            name="max_iter" 
+                        <Form.Item
+                            name="max_iter"
                             label="最大迭代次数"
                             tooltip="单次运行的最大迭代次数"
                         >
@@ -412,22 +412,22 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             case 'DBSCAN':
                 return (
                     <>
-                        <Form.Item 
-                            name="eps" 
+                        <Form.Item
+                            name="eps"
                             label="Eps (半径)"
                             tooltip="两个样本被视为邻居的最大距离"
                         >
                             <InputNumber step={0.1} min={0.01} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="min_samples" 
+                        <Form.Item
+                            name="min_samples"
                             label="最小样本数"
                             tooltip="核心点邻域内的最小样本数"
                         >
                             <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item 
-                            name="metric" 
+                        <Form.Item
+                            name="metric"
                             label="距离度量"
                             tooltip="计算点之间距离的方法"
                         >
@@ -461,24 +461,27 @@ const ModelParamsForm: React.FC<ModelParamsFormProps> = ({ data, onChange }) => 
             initialValues={initialValues}
             onValuesChange={(_, allValues) => onChange(allValues)}
         >
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <Title level={5} style={{ margin: 0 }}>{modelType} 参数</Title>
                 <Button onClick={handleReset} size="small">
                     重置默认
                 </Button>
             </div>
 
-            <Form.Item
-                name="auto_tune"
-                valuePropName="checked"
-                tooltip="开启后使用内置参数网格 (GridSearchCV) 自动搜索最优参数，耗时较长，且会忽略手动设置的部分参数"
-                style={{ marginBottom: 16 }}
-            >
-                <Switch checkedChildren="自动调参" unCheckedChildren="手动参数" />
-            </Form.Item>
+            {/* 聚类为无监督学习，后端无对应参数网格，不提供自动调参 */}
+            {!isClustering && (
+                <Form.Item
+                    name="auto_tune"
+                    valuePropName="checked"
+                    tooltip="开启后使用内置参数网格 (GridSearchCV) 自动搜索最优参数，耗时较长，且会忽略手动设置的部分参数"
+                    style={{ marginBottom: 16 }}
+                >
+                    <Switch checkedChildren="自动调参" unCheckedChildren="手动参数" />
+                </Form.Item>
+            )}
 
             {renderFields()}
-            
+
         </Form>
     );
 };

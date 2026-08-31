@@ -571,6 +571,13 @@ const Workflow = () => {
   };
 
   // ---------- Save / Load / Clear ----------
+  // 打开保存弹窗：输入框始终同步为「当前正在编辑的工作流名」，
+  // 避免残留上一次手输的名字导致误覆盖无关工作流
+  const openSaveModal = () => {
+    setWorkflowName(currentWorkflowName ?? "");
+    setSaveModalVisible(true);
+  };
+
   const handleSave = async () => {
     if (!workflowName) {
       message.error("请输入工作流名称");
@@ -586,6 +593,34 @@ const Workflow = () => {
       },
     }));
 
+    // 后端按名字直接覆盖写文件，重名会静默丢失旧工作流；
+    // 存成「另一个已存在的名字」时先二次确认
+    if (workflowName !== currentWorkflowName) {
+      let exists = false;
+      try {
+        const res = await listWorkflows();
+        exists = (res.workflows || []).some((w: any) => w.name === workflowName);
+      } catch (error) {
+        // 列表拉取失败不阻断保存，退化为原有行为
+        console.error("Check duplicate name failed:", error);
+      }
+      if (exists) {
+        Modal.confirm({
+          title: '同名工作流已存在',
+          content: `保存将覆盖已有工作流「${workflowName}」，其节点与运行结果无法恢复。确认覆盖？`,
+          okText: '覆盖保存',
+          okButtonProps: { danger: true },
+          cancelText: '取消',
+          onOk: () => doSave(serializableNodes),
+        });
+        return;
+      }
+    }
+
+    await doSave(serializableNodes);
+  };
+
+  const doSave = async (serializableNodes: any[]) => {
     try {
       await saveWorkflow(workflowName, serializableNodes, edges);
       message.success("保存成功");
@@ -663,6 +698,8 @@ const Workflow = () => {
         setEdges([]);
         setSelectedNodeId(null);
         setCurrentWorkflowName(null);
+        // 同时清掉待保存的名字，否则下次保存会预填旧名字并覆盖原工作流
+        setWorkflowName("");
         setDirty(true);
         message.success("画布已清空");
       },
@@ -953,7 +990,7 @@ const Workflow = () => {
             <Button icon={<ClearOutlined />} onClick={handleClear} type="primary" danger>清空</Button>
             <Button icon={<ReloadOutlined />} onClick={loadLatestWorkflow} loading={initializing}>重载</Button>
             <Button icon={<FolderOpenOutlined />} onClick={handleLoadList}>加载</Button>
-            <Button icon={<SaveOutlined />} onClick={() => setSaveModalVisible(true)}>保存</Button>
+            <Button icon={<SaveOutlined />} onClick={openSaveModal}>保存</Button>
             <Button icon={<HistoryOutlined />} onClick={openHistory}>历史</Button>
             {running ? (
               <Button danger icon={<StopOutlined />} onClick={handleCancelRun}>取消</Button>

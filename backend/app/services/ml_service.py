@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import io
 import json
 import joblib
 from joblib import parallel_backend
@@ -38,6 +39,16 @@ AUTO_TUNE_GRIDS = {
     "随机森林回归": {"n_estimators": [50, 100]},
     "GBDT回归": {"n_estimators": [50, 100], "learning_rate": [0.05, 0.1]},
 }
+
+# 元参数：由后端流程单独处理（划分测试集、随机种子、自动调参开关），
+# 不能透传给 sklearn 模型构造函数，否则会抛 unexpected keyword argument
+META_PARAM_KEYS = ("test_file", "random_state", "auto_tune")
+
+
+def strip_meta_params(params: dict, extra_exclude=()):
+    """剔除元参数后返回可直接传给 sklearn 构造函数的参数字典"""
+    excluded = set(META_PARAM_KEYS) | set(extra_exclude)
+    return {k: v for k, v in (params or {}).items() if k not in excluded}
 
 
 class MLService:
@@ -496,9 +507,8 @@ class MLService:
         if len(df_numeric) < 2:
             raise ValueError("Not enough samples for clustering (need >= 2)")
 
-        model_params = dict(params)
-        model_params.pop("test_file", None)
-        model_params.pop("random_state", None)
+        # 聚类不支持 GridSearchCV 自动调参，auto_tune 等元参数需在此剔除
+        model_params = strip_meta_params(params)
         random_state = params.get("random_state", 42)
 
         if algorithm == "K-Means":
@@ -551,14 +561,142 @@ class MLService:
         except Exception as e:
             raise RuntimeError(f"Cluster visualization failed: {str(e)}")
 
+    @staticmethod
+    def _autofit_excel(writer, max_width: int = 30, sample_rows: int = 200):
+        """粗略自适应列宽并冻结表头，导出后可直接投屏演示。
+
+        中文按 2 个字符宽度估算；仅采样前 sample_rows 行，
+        避免大表逐单元格扫全量拖慢导出。
+        """
+        for ws in writer.book.worksheets:
+            for col in ws.columns:
+                letter = col[0].column_letter
+                width = 0
+                for cell in col[:sample_rows + 1]:
+                    if cell.value is None:
+                        continue
+                    text = str(cell.value)
+                    width = max(width, sum(
+                        2 if ord(ch) > 127 else 1 for ch in text))
+                ws.column_dimensions[letter].width = min(
+                    max(width + 2, 8), max_width)
+            ws.freeze_panes = "A2"
+
+    def export_cluster_excel(self, data_file: str, algorithm: str, params: dict,
+                             preprocessing: list = None, cluster_names: dict = None):
+        """
+        导出聚类结果 Excel（双 Sheet），返回 (BytesIO, 建议文件名)。
+
+        Sheet1「聚类明细」：原始数据 + 所属簇编号/簇名称，可逐行落地到具体客户。
+                            这里刻意用未预处理的原始数据，保留业务可读量纲
+                            （标准化后的 z 分数无法给业务人员看）。
+        Sheet2「分群汇总」：每簇一行，数值列取均值、文本列取众数，附客户数与占比，
+                            最后追加「总体」基线行，便于对比“这一群比整体高多少”。
+        """
+        model, X = self._fit_clustering(
+            data_file, algorithm, params, preprocessing)
+        labels = model.labels_ if hasattr(
+            model, "labels_") else model.predict(X)
+        labels = np.asarray(labels)
+
+        # X 经过预处理与 dropna，index 是原数据的子集；用 index 对齐回原始数据
+        df_raw = self.load_data(data_file)
+        detail = df_raw.loc[X.index].copy()
+
+        # 避开与原数据重名的列，否则 DataFrame.insert 会抛 already exists
+        def _uniq(name: str) -> str:
+            candidate, suffix = name, 2
+            while candidate in df_raw.columns:
+                candidate = f"{name}_{suffix}"
+                suffix += 1
+            return candidate
+
+        col_cluster = _uniq("所属簇")
+        col_cname = _uniq("簇名称")
+
+        def _name_of(cid):
+            """簇编号转展示名。cluster_names 可由前端传入业务画像名。"""
+            if cid == -1:
+                return "噪声点"
+            if cluster_names:
+                return (cluster_names.get(str(cid))
+                        or cluster_names.get(cid) or f"簇 {cid}")
+            return f"簇 {cid}"
+
+        detail.insert(0, col_cluster, labels)
+        detail.insert(1, col_cname, [_name_of(c) for c in labels])
+
+        # 按 dtype 拆分汇总方式：数值取均值，文本取众数
+        num_cols = [c for c in df_raw.columns
+                    if pd.api.types.is_numeric_dtype(df_raw[c])]
+        cat_cols = [c for c in df_raw.columns if c not in num_cols]
+
+        # 近似唯一的标识列（如零售户编码）取众数没有业务含义，汇总时置“-”
+        row_total = len(df_raw)
+        id_like = {c for c in cat_cols
+                   if row_total and df_raw[c].nunique(dropna=True) > max(20, 0.5 * row_total)}
+
+        def _mode(series: pd.Series):
+            series = series.dropna()
+            if series.empty:
+                return None
+            modes = series.mode()
+            return modes.iloc[0] if not modes.empty else None
+
+        total = len(detail)
+        # DBSCAN 的噪声簇（-1）排到末尾，保证正常簇从 0 开始依序展示
+        cluster_ids = sorted(set(labels.tolist()), key=lambda c: (c == -1, c))
+        rows = []
+        for cid in cluster_ids:
+            sub = detail[detail[col_cluster] == cid]
+            row = {
+                col_cluster: cid,
+                col_cname: _name_of(cid),
+                "客户数": len(sub),
+                "占比": round(len(sub) / total * 100, 2) if total else 0,
+            }
+            for col in num_cols:
+                row[col] = round(float(sub[col].mean()),
+                                 2) if len(sub) else None
+            for col in cat_cols:
+                row[col] = "-" if col in id_like else _mode(sub[col])
+            rows.append(row)
+
+        # 总体基线行：讲“这群毛利率 22.4%，整体才 15.3%”比单报结果更有说服力
+        overall = {col_cluster: "-", col_cname: "总体",
+                   "客户数": total, "占比": 100.0 if total else 0}
+        for col in num_cols:
+            overall[col] = round(float(detail[col].mean()),
+                                 2) if total else None
+        for col in cat_cols:
+            overall[col] = "-" if col in id_like else _mode(detail[col])
+        rows.append(overall)
+
+        summary = pd.DataFrame(rows)
+        ordered = [col_cluster, col_cname, "客户数",
+                   "占比"] + num_cols + cat_cols
+        summary = summary[[c for c in ordered if c in summary.columns]]
+        summary = summary.rename(columns={"占比": "占比_%"})
+
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            detail.to_excel(writer, sheet_name="聚类明细", index=False)
+            summary.to_excel(writer, sheet_name="分群汇总", index=False)
+            self._autofit_excel(writer)
+        buf.seek(0)
+
+        base = os.path.splitext(os.path.basename(data_file))[0]
+        return buf, f"{base}_聚类结果.xlsx"
+
     def kmeans_elbow(self, data_file: str, params: dict, preprocessing: list = None, k_max: int = 10):
         """
         K-Means elbow method: inertia & silhouette for k = 1..k_max.
         Returns: {"ks": [...], "inertia": [...], "silhouette": [...], "recommended_k": int|None}
         """
         try:
-            model_params = {k: v for k, v in params.items()
-                            if k not in ("n_clusters", "test_file", "random_state")}
+            # n_clusters 由循环变量 k 提供，其余元参数一并剔除
+            model_params = strip_meta_params(
+                params, extra_exclude=("n_clusters",))
             random_state = params.get("random_state", 42)
 
             df = self.load_data(data_file)
@@ -720,10 +858,7 @@ class MLService:
                 random_state = params.get("random_state", 42)
 
                 # Remove common params that are not model specific or handled separately
-                model_params = params.copy()
-                model_params.pop("test_file", None)
-                model_params.pop("random_state", None)
-                model_params.pop("auto_tune", None)
+                model_params = strip_meta_params(params)
 
                 # Prepare Train Data
                 if label_col not in df.columns:

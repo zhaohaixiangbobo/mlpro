@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, Select, Row, Col, Typography, Table, Tabs, Empty, Spin, Space, Statistic, Divider, Tooltip, Button, Modal, Radio, message, Tag } from 'antd';
-import { 
-    LineChartOutlined, 
-    BarChartOutlined, 
-    RadarChartOutlined, 
+import {
+    LineChartOutlined,
+    BarChartOutlined,
+    RadarChartOutlined,
     TableOutlined,
     DotChartOutlined,
     ExperimentOutlined,
@@ -11,11 +11,12 @@ import {
     DownloadOutlined,
     FilePdfOutlined,
     FileWordOutlined,
+    FileExcelOutlined,
     ClusterOutlined,
     AimOutlined,
 } from '@ant-design/icons';
 import { Radar, Column, Scatter, Line, Bar } from '@ant-design/plots';
-import { listWorkflows, loadWorkflow, getPCAData, exportReport, getClusterVisualization, getKMeansElbow } from '../services/api';
+import { listWorkflows, loadWorkflow, getPCAData, exportReport, getClusterVisualization, getKMeansElbow, exportClusterExcel, extractBlobError } from '../services/api';
 import { defaultParams } from '../components/params/ModelParamsForm';
 
 const { Title, Text } = Typography;
@@ -47,6 +48,7 @@ const Dashboard: React.FC = () => {
     const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
     const [elbowData, setElbowData] = useState<any>(null);
     const [elbowLoading, setElbowLoading] = useState(false);
+    const [clusterExporting, setClusterExporting] = useState(false);
     const [workflowGraph, setWorkflowGraph] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
     const [isExportModalVisible, setIsExportModalVisible] = useState(false);
     const [exportFormat, setExportFormat] = useState<'docx' | 'pdf'>('docx');
@@ -121,14 +123,14 @@ const Dashboard: React.FC = () => {
             const data = await loadWorkflow(name);
             const nodes = data.nodes || [];
             const edges = data.edges || [];
-            
+
             // Extract successful algorithm results
             // Logic: Find AlgoNodes -> Follow Edge -> Find EvalNode -> Get Result
             const results: AlgoResult[] = [];
-            
+
             const algoNodes = nodes.filter((n: any) => n.type === 'algoNode' && n.data.category === 'Model');
             setHasSuccessfulAlgos(algoNodes.length > 0);
-            
+
             algoNodes.forEach((algoNode: any) => {
                 let resultData = null;
 
@@ -142,13 +144,13 @@ const Dashboard: React.FC = () => {
                         let frontier = [startId];
                         let depth = 0;
                         const MAX_DEPTH = 8;
-    
+
                         while (frontier.length > 0 && depth < MAX_DEPTH) {
                             const next: string[] = [];
                             for (const currentId of frontier) {
                                 if (visited.has(currentId)) continue;
                                 visited.add(currentId);
-    
+
                                 const outgoing = edges.filter((e: any) => e.source === currentId);
                                 for (const e of outgoing) {
                                     const targetNode = nodes.find((n: any) => n.id === e.target);
@@ -160,10 +162,10 @@ const Dashboard: React.FC = () => {
                             frontier = next;
                             depth++;
                         }
-    
+
                         return null;
                     };
-    
+
                     const evalNode = findEvalNodeFrom(algoNode.id);
                     if (evalNode && evalNode.data?.result) {
                         resultData = evalNode.data.result;
@@ -180,14 +182,14 @@ const Dashboard: React.FC = () => {
                     });
                 }
             });
-            
+
             setAlgoResults(results);
             setWorkflowGraph({ nodes, edges });
 
             // If there's a data node and clustering algorithms, fetch PCA + cluster visualization
             const dataNode = nodes.find((n: any) => n.type === 'dataNode');
             const hasClustering = results.some((r: AlgoResult) => r.category === 'Model' && r.result.type === 'clustering');
-            
+
             if (dataNode && dataNode.data.filename && hasClustering) {
                 fetchPCA(dataNode.data.filename);
                 const clusterAlgos = results.filter((r: AlgoResult) => r.result.type === 'clustering');
@@ -293,6 +295,32 @@ const Dashboard: React.FC = () => {
         }
     };
 
+    // 导出聚类结果 Excel：Sheet1 逐户明细 + Sheet2 分群汇总，用于汇报与客户经理落地
+    // 预处理链与散点图、选 K 曲线保持一致，保证导出的簇编号跟界面上看到的完全对得上
+    const handleExportCluster = async () => {
+        const algo = algoResults.find(r => r.id === activeClusterId);
+        const dataNode = workflowGraph.nodes.find((n: any) => n.type === 'dataNode');
+        if (!algo || !dataNode?.data?.filename) {
+            message.warning('请先运行包含聚类算法的工作流');
+            return;
+        }
+        setClusterExporting(true);
+        try {
+            await exportClusterExcel({
+                filename: dataNode.data.filename,
+                algorithm: algo.label,
+                params: algo.params || {},
+                preprocessing: buildPreprocessingSteps(algo.id, workflowGraph.nodes, workflowGraph.edges),
+            });
+            message.success('聚类结果已导出');
+        } catch (error: any) {
+            const detail = await extractBlobError(error, '请确认聚类模型参数有效');
+            message.error(`导出失败: ${detail}`);
+        } finally {
+            setClusterExporting(false);
+        }
+    };
+
     const fetchPCA = async (filename: string) => {
         setLoadingPca(true);
         try {
@@ -307,17 +335,17 @@ const Dashboard: React.FC = () => {
 
     // --- Data Processing for Charts ---
 
-    const classificationData = useMemo(() => 
-        algoResults.filter(r => r.result.type === 'classification'), 
-    [algoResults]);
+    const classificationData = useMemo(() =>
+        algoResults.filter(r => r.result.type === 'classification'),
+        [algoResults]);
 
-    const regressionData = useMemo(() => 
-        algoResults.filter(r => r.result.type === 'regression'), 
-    [algoResults]);
+    const regressionData = useMemo(() =>
+        algoResults.filter(r => r.result.type === 'regression'),
+        [algoResults]);
 
-    const clusteringData = useMemo(() => 
-        algoResults.filter(r => r.result.type === 'clustering'), 
-    [algoResults]);
+    const clusteringData = useMemo(() =>
+        algoResults.filter(r => r.result.type === 'clustering'),
+        [algoResults]);
 
     // Radar Chart Data for Classification
     const radarData = useMemo(() => {
@@ -370,7 +398,7 @@ const Dashboard: React.FC = () => {
             }
             return h;
         };
-        
+
         // Generate an array of colors corresponding to the unique series names in order
         const seriesNames = Array.from(new Set(radarData.map(d => d.name)));
         const seriesToId = new Map<string, string>();
@@ -393,10 +421,10 @@ const Dashboard: React.FC = () => {
 
         const columns = [
             { title: '算法', dataIndex: 'label', key: 'label' },
-            { 
-                title: '准确率', 
-                dataIndex: ['result', 'accuracy'], 
-                key: 'accuracy', 
+            {
+                title: '准确率',
+                dataIndex: ['result', 'accuracy'],
+                key: 'accuracy',
                 render: (v: number) => {
                     const isBest = v === bestAccuracy;
                     return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(4)}</Text>;
@@ -420,9 +448,9 @@ const Dashboard: React.FC = () => {
                     return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(4)}</Text>;
                 }
             },
-            { 
-                title: 'F1-Score', 
-                key: 'f1', 
+            {
+                title: 'F1-Score',
+                key: 'f1',
                 render: (record: AlgoResult) => {
                     const v = record.result.report?.['weighted avg']?.['f1-score'] || 0;
                     const isBest = v === bestF1;
@@ -457,7 +485,7 @@ const Dashboard: React.FC = () => {
                         >
                             {classificationData.length > 0 ? (
                                 <div style={{ height: 320 }}>
-                                    <Radar 
+                                    <Radar
                                         data={radarData}
                                         xField="metric"
                                         yField="value"
@@ -488,10 +516,10 @@ const Dashboard: React.FC = () => {
                     </Col>
                     <Col span={12}>
                         <Card title={<Space><TableOutlined />分类指标详情</Space>} style={{ height: 400 }}>
-                            <Table 
-                                dataSource={classificationData} 
-                                columns={columns} 
-                                pagination={false} 
+                            <Table
+                                dataSource={classificationData}
+                                columns={columns}
+                                pagination={false}
                                 size="small"
                                 rowKey="id"
                                 tableLayout="fixed"
@@ -500,7 +528,7 @@ const Dashboard: React.FC = () => {
                         </Card>
                     </Col>
                 </Row>
-                
+
                 {/* Individual Details */}
                 {classificationData.length > 0 && (
                     <>
@@ -516,7 +544,7 @@ const Dashboard: React.FC = () => {
                                         key: 'perclass',
                                         label: '类别明细',
                                         children: (
-                                            <Table 
+                                            <Table
                                                 dataSource={Object.entries(result.report || {})
                                                     .filter(([key]) => !['accuracy', 'macro avg', 'weighted avg'].includes(key))
                                                     .map(([key, val]: [string, any]) => ({ class: key, ...val }))}
@@ -707,32 +735,32 @@ const Dashboard: React.FC = () => {
                     </Col>
                     <Col span={12}>
                         <Card title={<Space><TableOutlined />回归指标对比</Space>} style={{ height: 400 }}>
-                            <Table 
-                                dataSource={regressionData} 
+                            <Table
+                                dataSource={regressionData}
                                 columns={[
                                     { title: '算法', dataIndex: 'label', key: 'label' },
-                                    { 
-                                        title: 'R2 Score', 
-                                        dataIndex: ['result', 'r2_score'], 
-                                        key: 'r2', 
+                                    {
+                                        title: 'R2 Score',
+                                        dataIndex: ['result', 'r2_score'],
+                                        key: 'r2',
                                         render: (v: number) => {
                                             const isBest = v === bestR2;
                                             return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(4)}</Text>;
                                         }
                                     },
-                                    { 
-                                        title: 'MAE', 
-                                        dataIndex: ['result', 'mae'], 
-                                        key: 'mae', 
+                                    {
+                                        title: 'MAE',
+                                        dataIndex: ['result', 'mae'],
+                                        key: 'mae',
                                         render: (v: number) => {
                                             const isBest = v === bestMAE;
                                             return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(4)}</Text>;
                                         }
                                     },
-                                    { 
-                                        title: 'RMSE', 
-                                        dataIndex: ['result', 'rmse'], 
-                                        key: 'rmse', 
+                                    {
+                                        title: 'RMSE',
+                                        dataIndex: ['result', 'rmse'],
+                                        key: 'rmse',
                                         render: (v: number) => {
                                             const isBest = v === bestRMSE;
                                             return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(4)}</Text>;
@@ -751,8 +779,8 @@ const Dashboard: React.FC = () => {
                                         render: renderParamsCell,
                                         onCell: () => ({ style: { width: PARAMS_COL_WIDTH, maxWidth: PARAMS_COL_WIDTH } }),
                                     }
-                                ]} 
-                                pagination={false} 
+                                ]}
+                                pagination={false}
                                 size="small"
                                 rowKey="id"
                                 tableLayout="fixed"
@@ -901,9 +929,9 @@ const Dashboard: React.FC = () => {
             <div style={{ marginTop: 24 }}>
                 <Row gutter={[16, 16]}>
                     <Col span={12}>
-                        <Card 
-                            title={<Space><DotChartOutlined />PCA 降维可视化 (数据分布)</Space>} 
-                            style={{ height: 500, overflow: 'hidden' }} 
+                        <Card
+                            title={<Space><DotChartOutlined />PCA 降维可视化 (数据分布)</Space>}
+                            style={{ height: 500, overflow: 'hidden' }}
                             bodyStyle={{ padding: 12, overflow: 'hidden' }}
                             loading={loadingPca}
                             extra={
@@ -914,7 +942,7 @@ const Dashboard: React.FC = () => {
                         >
                             <div style={{ height: 420 }}>
                                 {pcaData.length > 0 ? (
-                                    <Scatter 
+                                    <Scatter
                                         data={pcaData}
                                         xField="x"
                                         yField="y"
@@ -943,24 +971,24 @@ const Dashboard: React.FC = () => {
                             <div style={{ marginBottom: 24 }}>
                                 <Text type="secondary">聚类算法通常使用轮廓系数（Silhouette Score）等内部评估指标，值越接近 1 表示聚类效果越好。</Text>
                             </div>
-                            <Table 
-                                dataSource={clusteringData} 
+                            <Table
+                                dataSource={clusteringData}
                                 columns={[
                                     { title: '算法', dataIndex: 'label', key: 'label' },
                                     { title: '簇数量', dataIndex: ['result', 'n_clusters'], key: 'n' },
-                                    { 
-                                        title: '轮廓系数', 
-                                        dataIndex: ['result', 'silhouette_score'], 
-                                        key: 's', 
+                                    {
+                                        title: '轮廓系数',
+                                        dataIndex: ['result', 'silhouette_score'],
+                                        key: 's',
                                         render: (v: number) => {
                                             const isBest = v === bestSilhouette;
                                             return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(4)}</Text>;
                                         }
                                     },
-                                    { 
-                                        title: 'CH 指标', 
-                                        dataIndex: ['result', 'calinski_harabasz_score'], 
-                                        key: 'ch', 
+                                    {
+                                        title: 'CH 指标',
+                                        dataIndex: ['result', 'calinski_harabasz_score'],
+                                        key: 'ch',
                                         render: (v: number) => {
                                             const isBest = v === bestCH;
                                             return <Text strong={isBest} type={isBest ? 'danger' : undefined}>{v.toFixed(2)}</Text>;
@@ -973,8 +1001,8 @@ const Dashboard: React.FC = () => {
                                         render: renderParamsCell,
                                         onCell: () => ({ style: { width: PARAMS_COL_WIDTH, maxWidth: PARAMS_COL_WIDTH } }),
                                     }
-                                ]} 
-                                pagination={false} 
+                                ]}
+                                pagination={false}
                                 size="small"
                                 rowKey="id"
                                 tableLayout="fixed"
@@ -987,9 +1015,9 @@ const Dashboard: React.FC = () => {
                 {/* 聚类结果散点图（按簇着色） + K-Means 肘部法则 */}
                 <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
                     <Col span={12}>
-                        <Card 
-                            title={<Space><ClusterOutlined />聚类结果散点图 (按簇着色)</Space>} 
-                            style={{ height: 520, overflow: 'hidden' }} 
+                        <Card
+                            title={<Space><ClusterOutlined />聚类结果散点图 (按簇着色)</Space>}
+                            style={{ height: 520, overflow: 'hidden' }}
                             bodyStyle={{ padding: 12, overflow: 'hidden' }}
                             loading={clusterVizLoading}
                             extra={
@@ -1007,6 +1035,15 @@ const Dashboard: React.FC = () => {
                                             ))}
                                         </Select>
                                     )}
+                                    <Button
+                                        size="small"
+                                        icon={<FileExcelOutlined />}
+                                        loading={clusterExporting}
+                                        disabled={!clusterViz}
+                                        onClick={handleExportCluster}
+                                    >
+                                        导出 Excel
+                                    </Button>
                                     <Tooltip title="此图展示聚类算法的真实输出：每个点代表一个样本，颜色表示其所属簇。运行聚类模型后，将数据 PCA 投影到二维平面并按簇标签着色。灰色点为噪声（DBSCAN）。">
                                         <InfoCircleOutlined style={{ color: '#1890ff', cursor: 'pointer' }} />
                                     </Tooltip>
@@ -1032,7 +1069,7 @@ const Dashboard: React.FC = () => {
                                                     {clusterViz.n_noise > 0 && <Tag color="default">噪声点: {clusterViz.n_noise}</Tag>}
                                                     <Text type="secondary" style={{ fontSize: 12 }}>{clusterViz.algorithm}</Text>
                                                 </Space>
-                                                <Scatter 
+                                                <Scatter
                                                     data={vizPoints}
                                                     xField="x"
                                                     yField="y"
@@ -1061,9 +1098,9 @@ const Dashboard: React.FC = () => {
                         </Card>
                     </Col>
                     <Col span={12}>
-                        <Card 
-                            title={<Space><AimOutlined />K-Means 肘部法则 (选 K 辅助)</Space>} 
-                            style={{ height: 520, overflow: 'hidden' }} 
+                        <Card
+                            title={<Space><AimOutlined />K-Means 肘部法则 (选 K 辅助)</Space>}
+                            style={{ height: 520, overflow: 'hidden' }}
                             bodyStyle={{ padding: 12, overflow: 'hidden' }}
                             loading={elbowLoading}
                             extra={
@@ -1136,17 +1173,17 @@ const Dashboard: React.FC = () => {
                     <Text type="secondary">查看并对比工作流中各算法的训练效果</Text>
                 </div>
                 <Space>
-                    <Button 
-                        icon={<DownloadOutlined />} 
+                    <Button
+                        icon={<DownloadOutlined />}
                         onClick={() => setIsExportModalVisible(true)}
                         disabled={!selectedWorkflow}
                     >
                         导出报告
                     </Button>
                     <span style={{ fontWeight: 'bold' }}>当前工作流:</span>
-                    <Select 
-                        style={{ width: 200 }} 
-                        placeholder="选择工作流" 
+                    <Select
+                        style={{ width: 200 }}
+                        placeholder="选择工作流"
                         value={selectedWorkflow}
                         onChange={handleWorkflowChange}
                     >
@@ -1205,14 +1242,14 @@ const Dashboard: React.FC = () => {
                     <Space direction="vertical">
                         <Radio value="docx">
                             <Space>
-                                <FileWordOutlined style={{ color: '#1890ff' }} /> 
+                                <FileWordOutlined style={{ color: '#1890ff' }} />
                                 Word 文档 (.docx)
                                 <Text type="secondary" style={{ fontSize: 12 }}> - 推荐，支持编辑</Text>
                             </Space>
                         </Radio>
                         <Radio value="pdf">
                             <Space>
-                                <FilePdfOutlined style={{ color: '#ff4d4f' }} /> 
+                                <FilePdfOutlined style={{ color: '#ff4d4f' }} />
                                 PDF 文档 (.pdf)
                                 <Text type="secondary" style={{ fontSize: 12 }}> - 适合打印和分享</Text>
                             </Space>
